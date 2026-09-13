@@ -1,4 +1,4 @@
-import { useRef, useState } from 'react';
+import { useEffect, useRef, useState } from 'react';
 import type {
   Contribution,
   ContributionKind,
@@ -10,6 +10,7 @@ import type {
   PaymentMethod,
   Payout,
   Player,
+  ProjectDonation,
   SettlementResult,
 } from './domain';
 import {
@@ -22,6 +23,13 @@ import {
 } from './game';
 import { appendLedgerEvent, verifyLedger } from './ledger';
 import { MockLightningAdapter, type LightningInvoice } from './lightning';
+import {
+  clearSession,
+  loadSession,
+  saveSession,
+  SESSION_SCHEMA_VERSION,
+  type SessionSnapshot,
+} from './session';
 import { calculateSettlement } from './settlement';
 import './styles.css';
 
@@ -36,33 +44,83 @@ function toSats(amount: number, game: Game): number {
   return Math.round((amount / game.lockedBtcFiatRate) * 100_000_000);
 }
 
+function readStoredSession(): SessionSnapshot | null {
+  if (typeof window === 'undefined') return null;
+  try {
+    return loadSession(window.localStorage);
+  } catch {
+    return null;
+  }
+}
+
 export default function App() {
-  const adapterRef = useRef(new MockLightningAdapter());
-  const ledgerRef = useRef<LedgerEvent[]>([]);
+  const [initialSession] = useState<SessionSnapshot | null>(() => readStoredSession());
+  const adapterRef = useRef<MockLightningAdapter | null>(null);
+  if (!adapterRef.current) adapterRef.current = new MockLightningAdapter(Object.values(initialSession?.mockInvoices ?? {}));
+  const ledgerRef = useRef<LedgerEvent[]>(initialSession?.ledger ?? []);
 
-  const [currency, setCurrency] = useState<Currency>('EUR');
-  const [buyIn, setBuyIn] = useState(20);
-  const [chipValue, setChipValue] = useState(1);
-  const [btcFiatRate, setBtcFiatRate] = useState(100_000);
-  const [dealerEnabled, setDealerEnabled] = useState(false);
-  const [dealerMode, setDealerMode] = useState<'FIXED' | 'PERCENT'>('PERCENT');
-  const [dealerValue, setDealerValue] = useState(10);
+  const [currency, setCurrency] = useState<Currency>(initialSession?.game?.currency ?? 'EUR');
+  const [buyIn, setBuyIn] = useState(initialSession?.game?.buyInAmount ?? 20);
+  const [chipValue, setChipValue] = useState(initialSession?.game?.chipValue ?? 1);
+  const [btcFiatRate, setBtcFiatRate] = useState(initialSession?.game?.lockedBtcFiatRate ?? 100_000);
+  const [dealerEnabled, setDealerEnabled] = useState(initialSession?.game?.dealer.enabled ?? false);
+  const [dealerMode, setDealerMode] = useState<'FIXED' | 'PERCENT'>(initialSession?.game?.dealer.mode === 'FIXED' ? 'FIXED' : 'PERCENT');
+  const [dealerValue, setDealerValue] = useState(initialSession?.game?.dealer.value ?? 10);
+  const [dealerLabel, setDealerLabel] = useState(initialSession?.game?.dealer.label ?? 'Dealer');
+  const [dealerPayment, setDealerPayment] = useState<PaymentMethod>(initialSession?.game?.dealer.preferredPayment === 'LIGHTNING' ? 'LIGHTNING' : 'CASH');
+  const [dealerLightningAddress, setDealerLightningAddress] = useState(initialSession?.game?.dealer.lightningAddress ?? '');
+  const [startupDonationSats, setStartupDonationSats] = useState(0);
 
-  const [game, setGame] = useState<Game | null>(null);
-  const [players, setPlayers] = useState<Player[]>([]);
+  const [game, setGame] = useState<Game | null>(initialSession?.game ?? null);
+  const [players, setPlayers] = useState<Player[]>(initialSession?.players ?? []);
   const [nickname, setNickname] = useState('');
   const [preferredPayment, setPreferredPayment] = useState<PaymentMethod | 'ANY'>('CASH');
   const [lightningAddress, setLightningAddress] = useState('');
-  const [contributions, setContributions] = useState<Contribution[]>([]);
-  const [invoices, setInvoices] = useState<Record<string, LightningInvoice>>({});
-  const [stacks, setStacks] = useState<Record<string, number>>({});
-  const [stacksLocked, setStacksLocked] = useState(false);
-  const [settlement, setSettlement] = useState<SettlementResult | null>(null);
-  const [payouts, setPayouts] = useState<Payout[]>([]);
-  const [dealerPaid, setDealerPaid] = useState(false);
-  const [ledger, setLedger] = useState<LedgerEvent[]>([]);
-  const [ledgerVerified, setLedgerVerified] = useState(true);
+  const [contributions, setContributions] = useState<Contribution[]>(initialSession?.contributions ?? []);
+  const [invoices, setInvoices] = useState<Record<string, LightningInvoice>>(initialSession?.mockInvoices ?? {});
+  const [stacks, setStacks] = useState<Record<string, number>>(initialSession?.stacks ?? {});
+  const [stacksLocked, setStacksLocked] = useState(initialSession?.stacksLocked ?? false);
+  const [settlement, setSettlement] = useState<SettlementResult | null>(initialSession?.settlement ?? null);
+  const [payouts, setPayouts] = useState<Payout[]>(initialSession?.payouts ?? []);
+  const [dealerPaid, setDealerPaid] = useState(initialSession?.dealerPaid ?? false);
+  const [projectDonations, setProjectDonations] = useState<ProjectDonation[]>(initialSession?.projectDonations ?? []);
+  const [donationSats, setDonationSats] = useState(1000);
+  const [donorLabel, setDonorLabel] = useState('');
+  const [ledger, setLedger] = useState<LedgerEvent[]>(initialSession?.ledger ?? []);
+  const [ledgerVerified, setLedgerVerified] = useState(initialSession ? false : true);
+  const [lastSavedAt, setLastSavedAt] = useState(initialSession?.savedAt ?? '');
+  const [sessionRestored, setSessionRestored] = useState(Boolean(initialSession?.game));
   const [error, setError] = useState('');
+
+  useEffect(() => {
+    let active = true;
+    void verifyLedger(ledger).then((valid) => {
+      if (active) setLedgerVerified(valid);
+    });
+    return () => { active = false; };
+  }, [ledger]);
+
+  useEffect(() => {
+    if (typeof window === 'undefined') return;
+    const savedAt = new Date().toISOString();
+    const snapshot: SessionSnapshot = {
+      schemaVersion: SESSION_SCHEMA_VERSION,
+      savedAt,
+      game,
+      players,
+      contributions,
+      mockInvoices: invoices,
+      stacks,
+      stacksLocked,
+      settlement,
+      payouts,
+      dealerPaid,
+      ledger,
+      projectDonations,
+    };
+    saveSession(window.localStorage, snapshot);
+    setLastSavedAt(savedAt);
+  }, [game, players, contributions, invoices, stacks, stacksLocked, settlement, payouts, dealerPaid, ledger, projectDonations]);
 
   async function execute(action: () => void | Promise<void>) {
     try {
@@ -73,12 +131,27 @@ export default function App() {
     }
   }
 
+  async function assertLedgerIntegrity() {
+    if (!await verifyLedger(ledgerRef.current)) throw new Error('Le journal d’audit est invalide : opération financière bloquée');
+  }
+
   async function record(gameId: string, type: LedgerEventType, payload: Record<string, unknown> = {}) {
     const event = await appendLedgerEvent(ledgerRef.current, { gameId, type, payload });
     const next = [...ledgerRef.current, event];
     ledgerRef.current = next;
     setLedger(next);
-    setLedgerVerified(await verifyLedger(next));
+  }
+
+  async function recordDonation(gameId: string, sats: number, label?: string) {
+    if (!Number.isInteger(sats) || sats <= 0) throw new Error('Le don doit être un nombre entier positif de sats');
+    const donation: ProjectDonation = {
+      id: crypto.randomUUID(),
+      donorLabel: label?.trim() || undefined,
+      sats,
+      createdAt: new Date().toISOString(),
+    };
+    setProjectDonations((current) => [...current, donation]);
+    await record(gameId, 'PROJECT_DONATION_RECORDED', { donationId: donation.id, sats, donorLabel: donation.donorLabel ?? null, mock: true });
   }
 
   async function startGame() {
@@ -86,6 +159,8 @@ export default function App() {
     if (currency !== 'SATS' && btcFiatRate <= 0) throw new Error('Un taux BTC/fiat positif est requis pour les paiements Lightning');
     if (dealerEnabled && dealerValue < 0) throw new Error('La rémunération du dealer ne peut pas être négative');
     if (dealerEnabled && dealerMode === 'PERCENT' && dealerValue > 100) throw new Error('Le pourcentage dealer ne peut pas dépasser 100 %');
+    if (dealerEnabled && dealerPayment === 'LIGHTNING' && !dealerLightningAddress.trim()) throw new Error('La destination Lightning du dealer est requise');
+    if (startupDonationSats < 0 || !Number.isInteger(startupDonationSats)) throw new Error('Le don de démarrage doit être un nombre entier de sats');
 
     const createdAt = new Date().toISOString();
     const created: Game = {
@@ -96,7 +171,14 @@ export default function App() {
       rebuyAmount: buyIn,
       chipValue,
       status: 'OPEN',
-      dealer: dealerEnabled ? { enabled: true, mode: dealerMode, value: dealerValue } : { enabled: false, mode: 'NONE' },
+      dealer: dealerEnabled ? {
+        enabled: true,
+        mode: dealerMode,
+        value: dealerValue,
+        label: dealerLabel.trim() || 'Dealer',
+        preferredPayment: dealerPayment,
+        lightningAddress: dealerLightningAddress.trim() || undefined,
+      } : { enabled: false, mode: 'NONE' },
       lockedBtcFiatRate: currency === 'SATS' ? undefined : btcFiatRate,
       createdAt,
     };
@@ -108,6 +190,7 @@ export default function App() {
       lockedBtcFiatRate: created.lockedBtcFiatRate ?? null,
       dealer: created.dealer,
     });
+    if (startupDonationSats > 0) await recordDonation(created.id, startupDonationSats, 'Organisateur');
   }
 
   async function addPlayer() {
@@ -140,6 +223,7 @@ export default function App() {
 
   async function addCashContribution(player: Player, kind: ContributionKind) {
     if (!game) throw new Error('Aucune partie');
+    await assertLedgerIntegrity();
     if (kind === 'BUYIN' && hasOpenBuyIn(player.id)) throw new Error('Une cave existe déjà pour ce joueur');
     if (kind === 'REBUY' && !hasPaidBuyIn(player.id)) throw new Error('La cave initiale doit être encaissée avant un rebuy');
 
@@ -154,13 +238,14 @@ export default function App() {
 
   async function addLightningContribution(player: Player, kind: ContributionKind) {
     if (!game) throw new Error('Aucune partie');
+    await assertLedgerIntegrity();
     if (kind === 'BUYIN' && hasOpenBuyIn(player.id)) throw new Error('Une cave existe déjà pour ce joueur');
     if (kind === 'REBUY' && !hasPaidBuyIn(player.id)) throw new Error('La cave initiale doit être encaissée avant un rebuy');
 
     const contribution = createContribution(game, player.id, kind, 'LIGHTNING');
     const sats = toSats(contribution.amount, game);
     if (sats <= 0) throw new Error('Le montant converti en sats est trop faible');
-    const invoice = await adapterRef.current.createInvoice(sats, `NOIOU ${kind.toLowerCase()} ${player.nickname}`);
+    const invoice = await adapterRef.current!.createInvoice(sats, `NOIOU ${kind.toLowerCase()} ${player.nickname}`);
     const pending = markContributionPending([...contributions, contribution], contribution.id, invoice.id);
     setContributions(pending);
     setInvoices((current) => ({ ...current, [contribution.id]: invoice }));
@@ -170,10 +255,11 @@ export default function App() {
 
   async function simulateInvoicePaid(contributionId: string) {
     if (!game) throw new Error('Aucune partie');
+    await assertLedgerIntegrity();
     const contribution = contributions.find((item) => item.id === contributionId);
     if (!contribution?.externalReference) throw new Error('Invoice introuvable');
-    adapterRef.current.markInvoicePaid(contribution.externalReference);
-    const status = await adapterRef.current.getInvoiceStatus(contribution.externalReference);
+    adapterRef.current!.markInvoicePaid(contribution.externalReference);
+    const status = await adapterRef.current!.getInvoiceStatus(contribution.externalReference);
     if (status !== 'PAID') throw new Error('Invoice non payée');
     setContributions((current) => confirmLightningContribution(current, contributionId, contribution.externalReference!));
     setInvoices((current) => ({ ...current, [contributionId]: { ...current[contributionId], status: 'PAID' } }));
@@ -182,6 +268,7 @@ export default function App() {
 
   async function beginSettlement() {
     if (!game || game.status !== 'OPEN') throw new Error('La partie n’est pas ouverte');
+    await assertLedgerIntegrity();
     if (players.length === 0) throw new Error('Ajoute au moins un joueur');
     if (contributions.some((contribution) => contribution.status === 'CREATED' || contribution.status === 'PENDING')) throw new Error('Une cave ou un rebuy est encore en attente');
     if (!contributions.some((contribution) => contribution.status === 'PAID')) throw new Error('Aucune cave encaissée');
@@ -192,6 +279,7 @@ export default function App() {
 
   async function validateStacks() {
     if (!game || game.status !== 'SETTLING') throw new Error('La partie doit être en règlement');
+    await assertLedgerIntegrity();
     const finalStacks: FinalStack[] = players.map((player) => ({ playerId: player.id, chips: stacks[player.id] ?? 0 }));
     const result = calculateSettlement(game, players, contributions, finalStacks);
     setSettlement(result);
@@ -209,14 +297,17 @@ export default function App() {
 
   async function confirmPlayerPayout(payout: Payout) {
     if (!game || !settlement?.balanced) throw new Error('Le règlement n’est pas prêt');
+    await assertLedgerIntegrity();
     if (payout.status === 'CONFIRMED') return;
     const player = players.find((candidate) => candidate.id === payout.playerId);
     if (!player) throw new Error('Joueur introuvable');
 
     if (payout.method === 'LIGHTNING') {
       if (!player.lightningAddress) throw new Error(`Destination Lightning manquante pour ${player.nickname}`);
-      const prepared = await adapterRef.current.preparePayment(player.lightningAddress, toSats(payout.amount, game));
-      await adapterRef.current.confirmPreparedPayment(prepared.id);
+      const sats = toSats(payout.amount, game);
+      if (sats <= 0) throw new Error('Le paiement Lightning converti vaut 0 sat');
+      const prepared = await adapterRef.current!.preparePayment(player.lightningAddress, sats);
+      await adapterRef.current!.confirmPreparedPayment(prepared.id);
     }
 
     setPayouts((current) => confirmPayout(current, payout.playerId));
@@ -225,21 +316,62 @@ export default function App() {
 
   async function confirmDealerCompensation() {
     if (!game || !settlement || settlement.dealerCompensation <= 0) return;
+    await assertLedgerIntegrity();
     if (dealerPaid) return;
+    const method = game.dealer.preferredPayment ?? 'CASH';
+    if (method === 'LIGHTNING') {
+      if (!game.dealer.lightningAddress) throw new Error('Destination Lightning du dealer manquante');
+      const sats = toSats(settlement.dealerCompensation, game);
+      if (sats <= 0) throw new Error('La rémunération Lightning du dealer vaut 0 sat');
+      const prepared = await adapterRef.current!.preparePayment(game.dealer.lightningAddress, sats);
+      await adapterRef.current!.confirmPreparedPayment(prepared.id);
+    }
     setDealerPaid(true);
-    await record(game.id, 'DEALER_COMPENSATION_CONFIRMED', { amount: settlement.dealerCompensation });
+    await record(game.id, 'DEALER_COMPENSATION_CONFIRMED', { amount: settlement.dealerCompensation, method, mock: method === 'LIGHTNING' });
   }
 
   async function closeGame() {
     if (!game || !settlement) throw new Error('Le règlement n’est pas prêt');
+    await assertLedgerIntegrity();
     const closure = checkGameClosure(settlement, payouts, dealerPaid);
     if (!closure.allowed) throw new Error(closure.reasons.join(' · '));
     setGame({ ...game, status: 'CLOSED' });
     await record(game.id, 'GAME_CLOSED', { payouts: payouts.filter((payout) => payout.amount > 0).length, ledgerEvents: ledgerRef.current.length + 1 });
   }
 
+  async function addEndDonation() {
+    if (!game || game.status !== 'CLOSED') throw new Error('Les dons de fin sont proposés après clôture');
+    await assertLedgerIntegrity();
+    await recordDonation(game.id, donationSats, donorLabel);
+    setDonorLabel('');
+  }
+
+  function resetSession() {
+    if (typeof window !== 'undefined') clearSession(window.localStorage);
+    const emptyLedger: LedgerEvent[] = [];
+    ledgerRef.current = emptyLedger;
+    adapterRef.current = new MockLightningAdapter();
+    setGame(null);
+    setPlayers([]);
+    setContributions([]);
+    setInvoices({});
+    setStacks({});
+    setStacksLocked(false);
+    setSettlement(null);
+    setPayouts([]);
+    setDealerPaid(false);
+    setProjectDonations([]);
+    setLedger(emptyLedger);
+    setLedgerVerified(true);
+    setSessionRestored(false);
+    setError('');
+    setStartupDonationSats(0);
+    setDonorLabel('');
+  }
+
   const paidTotal = contributions.filter((contribution) => contribution.status === 'PAID').reduce((sum, contribution) => sum + contribution.amount, 0);
   const closure = checkGameClosure(settlement, payouts, dealerPaid);
+  const totalDonations = projectDonations.reduce((sum, donation) => sum + donation.sats, 0);
 
   return (
     <main className="shell">
@@ -252,6 +384,8 @@ export default function App() {
         <span className="badge">Non-custodial by design</span>
       </header>
 
+      {sessionRestored && <div className="session-note"><span>Session locale restaurée · aucun secret wallet n’est stocké.</span><button onClick={() => setSessionRestored(false)}>OK</button></div>}
+      {game && <div className="save-note">Sauvegarde locale automatique {lastSavedAt ? `· ${new Date(lastSavedAt).toLocaleTimeString('fr-FR')}` : ''}</div>}
       {error && <div className="alert" role="alert">{error}</div>}
 
       {!game && (
@@ -274,6 +408,7 @@ export default function App() {
             </label>}
             <label className="check"><input type="checkbox" checked={dealerEnabled} onChange={(event) => setDealerEnabled(event.target.checked)} /> Dealer présent</label>
             {dealerEnabled && <>
+              <label>Nom du dealer<input value={dealerLabel} onChange={(event) => setDealerLabel(event.target.value)} /></label>
               <label>Mode dealer
                 <select value={dealerMode} onChange={(event) => setDealerMode(event.target.value as 'FIXED' | 'PERCENT')}>
                   <option value="PERCENT">Pourcentage du pot</option>
@@ -283,7 +418,17 @@ export default function App() {
               <label>{dealerMode === 'PERCENT' ? 'Dealer (%)' : `Dealer (${currency})`}
                 <input type="number" min="0" max={dealerMode === 'PERCENT' ? 100 : undefined} value={dealerValue} onChange={(event) => setDealerValue(Number(event.target.value))} />
               </label>
+              <label>Règlement dealer
+                <select value={dealerPayment} onChange={(event) => setDealerPayment(event.target.value as PaymentMethod)}>
+                  <option value="CASH">Espèces</option><option value="LIGHTNING">Lightning</option>
+                </select>
+              </label>
+              {dealerPayment === 'LIGHTNING' && <label>Lightning Address dealer<input value={dealerLightningAddress} onChange={(event) => setDealerLightningAddress(event.target.value)} placeholder="dealer@wallet.example" /></label>}
             </>}
+          </div>
+          <div className="donation-options">
+            <strong>❤️ Soutenir NOIOU au lancement (mock, hors cagnotte)</strong>
+            <div className="actions">{[0, 500, 1000, 5000].map((sats) => <button className={startupDonationSats === sats ? 'selected' : ''} key={sats} onClick={() => setStartupDonationSats(sats)}>{sats === 0 ? 'Pas maintenant' : `${sats.toLocaleString('fr-FR')} sats`}</button>)}</div>
           </div>
           <button className="primary" onClick={() => void execute(startGame)}>Démarrer la partie</button>
         </section>
@@ -292,7 +437,7 @@ export default function App() {
       {game && (
         <section className="card status-card">
           <div><strong>Partie {game.status}</strong><small>{game.currency} · cave {formatAmount(game.buyInAmount, game.currency)}</small></div>
-          <div><strong>{formatAmount(paidTotal, game.currency)}</strong><small>encaissés</small></div>
+          <div><strong>{formatAmount(paidTotal, game.currency)}</strong><small>encaissés dans la partie</small></div>
         </section>
       )}
 
@@ -356,7 +501,7 @@ export default function App() {
               const player = players.find((candidate) => candidate.id === payout.playerId)!;
               return <div className="payout" key={payout.playerId}><span>{player.nickname}</span><strong>{formatAmount(payout.amount, game.currency)}</strong><small>{payout.method} · {payout.status}</small>{game.status !== 'CLOSED' && payout.status !== 'CONFIRMED' && <button onClick={() => void execute(() => confirmPlayerPayout(payout))}>{payout.method === 'LIGHTNING' ? 'Confirmer paiement mock' : 'Confirmer remise espèces'}</button>}</div>;
             })}</div>
-            {settlement.dealerCompensation > 0 && <div className="dealer-line"><span>Dealer</span><strong>{formatAmount(settlement.dealerCompensation, game.currency)}</strong><button disabled={dealerPaid || game.status === 'CLOSED'} onClick={() => void execute(confirmDealerCompensation)}>{dealerPaid ? 'Confirmé ✓' : 'Confirmer rémunération'}</button></div>}
+            {settlement.dealerCompensation > 0 && <div className="dealer-line"><span>{game.dealer.label ?? 'Dealer'} · {game.dealer.preferredPayment ?? 'CASH'}</span><strong>{formatAmount(settlement.dealerCompensation, game.currency)}</strong><button disabled={dealerPaid || game.status === 'CLOSED'} onClick={() => void execute(confirmDealerCompensation)}>{dealerPaid ? 'Confirmé ✓' : (game.dealer.preferredPayment === 'LIGHTNING' ? 'Confirmer paiement mock' : 'Confirmer rémunération')}</button></div>}
             {game.status === 'SETTLING' && <><div className={`closure ${closure.allowed ? 'ready' : ''}`}>{closure.allowed ? 'Tous les règlements sont confirmés.' : closure.reasons.join(' · ')}</div><button className="primary" disabled={!closure.allowed} onClick={() => void execute(closeGame)}>Clôturer la partie</button></>}
             {game.status === 'CLOSED' && <div className="success">Partie clôturée : aucun règlement restant.</div>}
           </section>}
@@ -370,9 +515,11 @@ export default function App() {
       </section>
 
       <section className="card donation">
-        <div><h2>Soutenir NOIOU</h2><p>Les dons seront volontaires et toujours séparés de la cagnotte. Aucun prélèvement automatique.</p></div>
-        <button disabled>⚡ Don Lightning — bientôt</button>
+        <div><h2>Soutenir NOIOU</h2><p>Dons volontaires, en sats, toujours hors cagnotte. Prototype : aucune transaction réelle.</p><small>{projectDonations.length} don(s) mock · {totalDonations.toLocaleString('fr-FR')} sats au total</small></div>
+        {game?.status === 'CLOSED' ? <div className="donation-form"><label>Donateur (pseudo facultatif)<input value={donorLabel} onChange={(event) => setDonorLabel(event.target.value)} placeholder="Alice" /></label><label>Sats<input type="number" min="1" step="1" value={donationSats} onChange={(event) => setDonationSats(Number(event.target.value))} /></label><div className="actions">{[500, 1000, 5000].map((sats) => <button key={sats} onClick={() => setDonationSats(sats)}>{sats.toLocaleString('fr-FR')}</button>)}</div><button onClick={() => void execute(addEndDonation)}>⚡ Simuler le don</button></div> : <span className="muted">Un autre don pourra être proposé après clôture.</span>}
       </section>
+
+      {game?.status === 'CLOSED' && <section className="card"><div className="section-title"><h2>Nouvelle soirée</h2><span>la partie actuelle est terminée</span></div><p className="muted">La session locale actuelle sera effacée du navigateur. Le code et les données GitHub ne sont pas concernés.</p><button onClick={resetSession}>Effacer cette session locale et créer une nouvelle partie</button></section>}
     </main>
   );
 }

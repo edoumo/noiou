@@ -23,6 +23,15 @@ export class MockLightningAdapter implements LightningAdapter {
   private invoices = new Map<string, LightningInvoice>();
   private payments = new Map<string, PreparedLightningPayment>();
 
+  constructor(initialInvoices: readonly LightningInvoice[] = []) {
+    for (const invoice of initialInvoices) this.restoreInvoice(invoice);
+  }
+
+  restoreInvoice(invoice: LightningInvoice): void {
+    if (!invoice.id.trim() || !Number.isInteger(invoice.sats) || invoice.sats <= 0) throw new Error('Invalid mock invoice snapshot');
+    this.invoices.set(invoice.id, { ...invoice });
+  }
+
   async createInvoice(sats: number, memo = 'NOIOU buy-in'): Promise<LightningInvoice> {
     if (!Number.isInteger(sats) || sats <= 0) throw new Error('Invoice amount must be positive integer sats');
     const id = crypto.randomUUID();
