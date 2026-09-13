@@ -22,14 +22,15 @@ NOIOU is a settlement companion for **physical** poker games. It does not deal c
 - cash buy-ins and rebuys;
 - mock Lightning fallback with scannable QR codes;
 - **real NWC receive-only buy-ins and rebuys** using `get_info`, `make_invoice` and `lookup_invoice`;
+- **real NWC game receipts are SATS-only in the private alpha**; EUR/USD remain available in mock mode while exact fiat minor-unit accounting is still pending;
 - real NWC receipts credit the organizer's wallet directly; NOIOU never receives or holds the sats;
 - wallet connection starts diagnostic-only: **real game receipts require explicit arming**;
 - once an active game is committed to real NWC receipts, disconnect/reload cannot silently fall back to mock;
 - a Lightning contribution becomes `PAID` only after the wallet reports the invoice settled;
 - hard rejection of NWC connections exposing outgoing payment permissions;
 - NWC credential kept only in volatile browser memory, never in backups or the game ledger;
-- private-alpha live-invoice cap of 250,000 sats per cave/rebuy;
-- EUR/USD/SATS settlement with a locked manual fiat/BTC rate in the prototype;
+- private-alpha live-invoice cap of 250,000 sats per cave/rebuy; first real tests should use tiny amounts far below that ceiling;
+- EUR/USD/SATS mock settlement with a locked manual fiat/BTC rate in the prototype;
 - final physical chip reconciliation and settlement blocking on mismatch;
 - outgoing Lightning payouts are **manual outside NOIOU** and only confirmed in the ledger after the organizer says the wallet payment was made;
 - explicit player payout confirmation and game-close gate;
@@ -40,7 +41,14 @@ NOIOU is a settlement companion for **physical** poker games. It does not deal c
 - framework-independent domain/settlement logic;
 - `LightningAdapter` boundary for NWC and future optional LNbits adapters;
 - real outgoing NWC payments remain **disabled by design**;
-- CI: production dependency audit, strict typecheck, tests and production build.
+- production Docker/nginx packaging for the authenticated private alpha, with read-only runtime, no-new-privileges and no application host port publication;
+- CI: production dependency audit, strict typecheck, automated tests, application build, Docker build and hardened-container smoke test.
+
+## Private alpha deployment
+
+The current alpha is served at `https://alpha.noiou.io` behind an authenticated origin and Cloudflare Tunnel. The application container itself publishes no host port. Deployment instructions and invariants are documented in `docs/ALPHA_DEPLOYMENT.md`.
+
+The alpha is **not production-ready**. Real-money testing is limited to controlled, deliberately tiny receive-only NWC tests in SATS. Outgoing Lightning payments remain manual in the organizer's own wallet.
 
 ## Development
 
@@ -53,6 +61,6 @@ npm run build
 
 A receive-only NWC wallet can be connected for diagnostics without enabling real caves. Real game receipts require an explicit acknowledgement/arming action. If an active game has already committed to NWC real receipts, NOIOU keeps that mode locked across disconnect/reload and requires the wallet to be reconnected instead of silently switching to mock. The NWC URI/secret itself is never persisted. Real outgoing payouts are not executed by NOIOU.
 
-Before a physical dry run, read `docs/TABLE_TEST.md`. NWC security constraints are in `docs/NWC_SECURITY.md`.
+Before a physical dry run, read `docs/TABLE_TEST.md` and `docs/MOBILE_ALPHA.md`. NWC security constraints are in `docs/NWC_SECURITY.md`.
 
 See also `docs/V1_SCOPE.md`, `ARCHITECTURE.md`, `SECURITY.md` and `docs/REGULATORY_BOUNDARIES.md` for the current design constraints.
