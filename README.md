@@ -20,12 +20,16 @@ NOIOU is a settlement companion for **physical** poker games. It does not deal c
 - mobile-first React/TypeScript interface with a four-step table workflow;
 - PWA manifest and production service worker shell;
 - cash buy-ins and rebuys;
-- mock Lightning invoices with scannable QR codes and mock outgoing payments;
-- isolated **real NWC receive-only diagnostic** using `get_info`, `make_invoice` and `lookup_invoice`;
+- mock Lightning fallback with scannable QR codes;
+- **real NWC receive-only buy-ins and rebuys** using `get_info`, `make_invoice` and `lookup_invoice`;
+- real NWC receipts credit the organizer's wallet directly; NOIOU never receives or holds the sats;
+- a Lightning contribution becomes `PAID` only after the wallet reports the invoice settled;
 - hard rejection of NWC connections exposing outgoing payment permissions;
 - NWC credential kept only in volatile browser memory, never in backups or the game ledger;
+- private-alpha live-invoice cap of 250,000 sats per cave/rebuy;
 - EUR/USD/SATS settlement with a locked manual fiat/BTC rate in the prototype;
 - final physical chip reconciliation and settlement blocking on mismatch;
+- outgoing Lightning payouts are **manual outside NOIOU** and only confirmed in the ledger after the organizer says the wallet payment was made;
 - explicit player payout confirmation and game-close gate;
 - optional fixed/percentage dealer compensation;
 - SHA-256 chained append-only audit ledger with tamper tests;
@@ -45,7 +49,7 @@ npm test
 npm run build
 ```
 
-The NWC diagnostic may create and receive a real Lightning payment, but it is deliberately outside the game pot and ledger. Real NWC buy-ins/rebuys and real payouts are **not** enabled yet.
+A connected receive-only NWC wallet can now create real game invoices. The NWC URI/secret is never persisted: after reload, reconnect the same wallet before checking an outstanding real invoice. Real outgoing payouts are not executed by NOIOU.
 
 Before a physical dry run, read `docs/TABLE_TEST.md`. NWC security constraints are in `docs/NWC_SECURITY.md`.
 
