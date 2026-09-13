@@ -38,6 +38,9 @@ export interface DealerRule {
   enabled: boolean;
   mode: DealerMode;
   value?: number;
+  label?: string;
+  preferredPayment?: PaymentMethod | 'ANY';
+  lightningAddress?: string;
 }
 
 export interface Game {
