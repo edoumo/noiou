@@ -50,17 +50,17 @@ export default function NwcReceiveDiagnostic() {
   function arm() {
     if (!acknowledged) throw new Error('Confirme d’abord que tu comprends que les prochaines caves Lightning pourront être réelles');
     nwc.armLiveGameReceipts();
-    setStatus('Réception réelle armée pour la création de la prochaine partie. Le mode sera verrouillé au démarrage de la partie.');
+    setStatus('Réception réelle armée. Les prochaines caves/rebuys Lightning de la partie utiliseront NWC tant que la page reste ouverte.');
   }
 
   function disarm() {
     nwc.disarmLiveGameReceipts();
     setAcknowledged(false);
-    setStatus('Réception réelle désarmée. Une nouvelle partie démarrera en Lightning mock.');
+    setStatus('Réception réelle désarmée. Les caves/rebuys Lightning reviennent au mock.');
   }
 
   async function createInvoice() {
-    if (!nwc.connected) throw new Error('Connecte d’abord un wallet NWC receive-only');
+    if (!nwc.transportConnected) throw new Error('Connecte d’abord un wallet NWC receive-only');
     if (!Number.isInteger(amountSats) || amountSats <= 0 || amountSats > 1000) {
       throw new Error('Pour le diagnostic, utilise un montant entier entre 1 et 1000 sats');
     }
@@ -85,11 +85,13 @@ export default function NwcReceiveDiagnostic() {
           <p className="nwc-kicker">Connexion privée · réception Lightning réelle</p>
           <h2 id="nwc-live-title">NWC réception seule</h2>
           <p>
-            La connexion peut servir aux diagnostics et, seulement après armement explicite, aux caves/rebuys réels d’une nouvelle partie.
+            La connexion peut servir aux diagnostics et, seulement après armement explicite, aux caves/rebuys réels.
             NOIOU refuse toute permission de paiement sortant.
           </p>
         </div>
-        <span className={connection ? 'nwc-live' : 'nwc-off'}>{connection ? 'RECEIVE ONLY' : 'DÉCONNECTÉ'}</span>
+        <span className={connection ? 'nwc-live' : 'nwc-off'}>
+          {connection ? (nwc.liveGameReceiptsArmed ? 'RÉEL ARMÉ' : 'DIAGNOSTIC') : 'DÉCONNECTÉ'}
+        </span>
       </div>
 
       {!connection ? (
@@ -139,14 +141,14 @@ export default function NwcReceiveDiagnostic() {
               <>
                 <label className="check">
                   <input type="checkbox" checked={acknowledged} onChange={(event) => setAcknowledged(event.target.checked)} />
-                  Je comprends que démarrer une partie dans ce mode fera créer de vraies invoices Lightning pour les caves/rebuys.
+                  Je comprends que les prochaines caves/rebuys Lightning créeront de vraies invoices et créditeront réellement le wallet connecté.
                 </label>
                 <button disabled={!acknowledged} onClick={() => void run(async () => arm())}>Armer les caves réelles</button>
               </>
             ) : (
-              <button onClick={disarm}>Désarmer et revenir au mock pour la prochaine partie</button>
+              <button onClick={disarm}>Désarmer les caves réelles</button>
             )}
-            <small>L’armement est volontairement volatil : reconnexion ou rechargement = désarmé. Le mode est ensuite verrouillé au démarrage de chaque partie.</small>
+            <small>L’armement est volontairement volatil : reconnexion ou rechargement = désarmé. Aucun secret NWC n’est persisté.</small>
           </div>
         </>
       )}
