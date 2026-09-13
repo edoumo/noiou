@@ -1,4 +1,5 @@
 import type { Contribution, Game, LedgerEvent, Payout, Player, ProjectDonation, SettlementResult } from './domain';
+import type { LightningInvoice } from './lightning';
 
 export const SESSION_STORAGE_KEY = 'noiou.session.v1';
 export const SESSION_SCHEMA_VERSION = 1 as const;
@@ -9,6 +10,7 @@ export interface SessionSnapshot {
   game: Game | null;
   players: Player[];
   contributions: Contribution[];
+  mockInvoices: Record<string, LightningInvoice>;
   stacks: Record<string, number>;
   stacksLocked: boolean;
   settlement: SettlementResult | null;
@@ -25,6 +27,7 @@ export function createEmptySession(savedAt = new Date().toISOString()): SessionS
     game: null,
     players: [],
     contributions: [],
+    mockInvoices: {},
     stacks: {},
     stacksLocked: false,
     settlement: null,
@@ -47,7 +50,7 @@ export function parseSession(raw: string): SessionSnapshot {
   if (!Array.isArray(candidate.players) || !Array.isArray(candidate.contributions) || !Array.isArray(candidate.payouts) || !Array.isArray(candidate.ledger) || !Array.isArray(candidate.projectDonations)) {
     throw new Error('Invalid session collections');
   }
-  if (!candidate.stacks || typeof candidate.stacks !== 'object') throw new Error('Invalid stacks');
+  if (!candidate.stacks || typeof candidate.stacks !== 'object' || !candidate.mockInvoices || typeof candidate.mockInvoices !== 'object') throw new Error('Invalid session maps');
   if (typeof candidate.stacksLocked !== 'boolean' || typeof candidate.dealerPaid !== 'boolean' || typeof candidate.savedAt !== 'string') {
     throw new Error('Invalid session state');
   }
