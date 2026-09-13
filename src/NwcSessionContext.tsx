@@ -1,9 +1,10 @@
 import { createContext, useContext, useEffect, useMemo, useRef, useState, type ReactNode } from 'react';
 import type { LightningInvoice } from './lightning';
 import { NwcReceiveOnlyAdapter, type NwcReceiveConnectionInfo } from './nwcReceive';
-import { SESSION_CLEARED_EVENT, storageRequiresNwcReceipts } from './session';
+import { loadSession, SESSION_CLEARED_EVENT, storageRequiresNwcReceipts } from './session';
 
 export const MAX_LIVE_GAME_INVOICE_SATS = 250_000;
+export const REAL_NWC_ALPHA_CURRENCY = 'SATS' as const;
 
 interface NwcSessionValue {
   /** True when the game flow must use NWC: explicitly armed, or an active game is already locked to NWC. */
@@ -33,9 +34,25 @@ export function assertLiveGameInvoiceAmount(sats: number): void {
   }
 }
 
+export function assertRealNwcGameCurrency(currency: string | undefined): void {
+  if (currency !== REAL_NWC_ALPHA_CURRENCY) {
+    throw new Error('Alpha NWC réel : les caves et rebuys réels sont autorisés uniquement pour une partie en SATS. Utilise le mode mock pour EUR/USD.');
+  }
+}
+
 function readActiveGameNwcLock(): boolean {
   if (typeof window === 'undefined') return false;
   return storageRequiresNwcReceipts(window.localStorage);
+}
+
+function readActiveGameCurrency(): string | undefined {
+  if (typeof window === 'undefined') return undefined;
+  try {
+    return loadSession(window.localStorage)?.game?.currency;
+  } catch {
+    // Fail closed for real-funds operations when the persisted game cannot be trusted.
+    return undefined;
+  }
 }
 
 export function NwcSessionProvider({ children }: { children: ReactNode }) {
@@ -67,7 +84,12 @@ export function NwcSessionProvider({ children }: { children: ReactNode }) {
         throw new Error('Reconnecte un wallet NWC receive-only avant de créer une cave réelle');
       }
       if (!liveGameReceiptsArmed && !activeGameLockedToNwc) throw new Error('Les caves Lightning réelles ne sont pas armées');
+
+      // Real-money alpha is deliberately SATS-only until fiat/minor-unit accounting is migrated
+      // away from generic JavaScript numbers. The persisted active game is authoritative.
+      assertRealNwcGameCurrency(readActiveGameCurrency());
       assertLiveGameInvoiceAmount(sats);
+
       const invoice = await adapter.createInvoice(sats, memo);
       // Once a real game invoice exists, the active game must never silently fall back to mock.
       setActiveGameLockedToNwc(true);
