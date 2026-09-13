@@ -9,8 +9,8 @@ export function createContribution(
   playerId: string,
   kind: ContributionKind,
   method: PaymentMethod,
-  id = crypto.randomUUID(),
-  createdAt = new Date().toISOString(),
+  id: string = crypto.randomUUID(),
+  createdAt: string = new Date().toISOString(),
 ): Contribution {
   if (game.status !== 'OPEN') throw new Error('Contributions are only allowed while the game is open');
   if (kind === 'REBUY' && !game.rebuyEnabled) throw new Error('Rebuys are disabled');
@@ -53,7 +53,7 @@ export function markContributionPending(
 export function confirmCashContribution(
   contributions: readonly Contribution[],
   contributionId: string,
-  paidAt = new Date().toISOString(),
+  paidAt: string = new Date().toISOString(),
 ): Contribution[] {
   return contributions.map((item) => {
     if (item.id !== contributionId) return item;
@@ -68,7 +68,7 @@ export function confirmLightningContribution(
   contributions: readonly Contribution[],
   contributionId: string,
   externalReference: string,
-  paidAt = new Date().toISOString(),
+  paidAt: string = new Date().toISOString(),
 ): Contribution[] {
   const duplicate = contributions.find((item) => item.id !== contributionId && item.externalReference === externalReference);
   if (duplicate) throw new Error('External reference already used');
@@ -87,7 +87,7 @@ export function confirmLightningContribution(
 }
 
 export function confirmPayout(payouts: readonly Payout[], playerId: string): Payout[] {
-  return payouts.map((payout) => payout.playerId === playerId ? { ...payout, status: 'CONFIRMED' } : payout);
+  return payouts.map((payout) => payout.playerId === playerId ? { ...payout, status: 'CONFIRMED' as const } : payout);
 }
 
 export interface ClosureCheck {
