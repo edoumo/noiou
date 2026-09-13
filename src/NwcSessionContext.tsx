@@ -1,7 +1,7 @@
 import { createContext, useContext, useEffect, useMemo, useRef, useState, type ReactNode } from 'react';
 import type { LightningInvoice } from './lightning';
 import { NwcReceiveOnlyAdapter, type NwcReceiveConnectionInfo } from './nwcReceive';
-import { storageRequiresNwcReceipts } from './session';
+import { SESSION_CLEARED_EVENT, storageRequiresNwcReceipts } from './session';
 
 export const MAX_LIVE_GAME_INVOICE_SATS = 250_000;
 
@@ -47,6 +47,16 @@ export function NwcSessionProvider({ children }: { children: ReactNode }) {
   useEffect(() => () => {
     adapterRef.current?.close();
     adapterRef.current = null;
+  }, []);
+
+  useEffect(() => {
+    if (typeof window === 'undefined') return;
+    const handleSessionCleared = () => {
+      setLiveGameReceiptsArmed(false);
+      setActiveGameLockedToNwc(false);
+    };
+    window.addEventListener(SESSION_CLEARED_EVENT, handleSessionCleared);
+    return () => window.removeEventListener(SESSION_CLEARED_EVENT, handleSessionCleared);
   }, []);
 
   const value = useMemo<NwcSessionValue>(() => {
