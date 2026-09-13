@@ -35,7 +35,7 @@ export default function NwcReceiveDiagnostic() {
     setAcknowledged(false);
 
     const connection = await nwc.connect(secretUri);
-    setStatus(`Wallet NWC connecté en réception seule${connection.alias ? ` : ${connection.alias}` : ''}. Les caves réelles restent désarmées.`);
+    setStatus(`Wallet NWC connecté en réception seule${connection.alias ? ` : ${connection.alias}` : ''}.`);
   }
 
   function disconnect() {
@@ -44,13 +44,13 @@ export default function NwcReceiveDiagnostic() {
     setUri('');
     setAcknowledged(false);
     setError('');
-    setStatus('Connexion NWC supprimée de la mémoire vive. Les invoices déjà créées restent dans la session de partie, mais il faudra reconnecter le wallet pour les vérifier.');
+    setStatus('Connexion NWC supprimée de la mémoire vive. Si une partie réelle est en cours, NOIOU restera verrouillé sur NWC et exigera une reconnexion avant toute nouvelle cave/rebuy.');
   }
 
   function arm() {
     if (!acknowledged) throw new Error('Confirme d’abord que tu comprends que les prochaines caves Lightning pourront être réelles');
     nwc.armLiveGameReceipts();
-    setStatus('Réception réelle armée. Les prochaines caves/rebuys Lightning de la partie utiliseront NWC tant que la page reste ouverte.');
+    setStatus('Réception réelle armée. Les prochaines caves/rebuys Lightning utiliseront NWC.');
   }
 
   function disarm() {
@@ -77,6 +77,11 @@ export default function NwcReceiveDiagnostic() {
   }
 
   const connection = nwc.connection;
+  const gameModeLabel = nwc.activeGameLockedToNwc
+    ? 'PARTIE NWC VERROUILLÉE'
+    : nwc.liveGameReceiptsArmed
+      ? 'RÉEL ARMÉ'
+      : 'DIAGNOSTIC';
 
   return (
     <section className="nwc-diagnostic" aria-labelledby="nwc-live-title">
@@ -89,13 +94,12 @@ export default function NwcReceiveDiagnostic() {
             NOIOU refuse toute permission de paiement sortant.
           </p>
         </div>
-        <span className={connection ? 'nwc-live' : 'nwc-off'}>
-          {connection ? (nwc.liveGameReceiptsArmed ? 'RÉEL ARMÉ' : 'DIAGNOSTIC') : 'DÉCONNECTÉ'}
-        </span>
+        <span className={connection ? 'nwc-live' : 'nwc-off'}>{connection ? gameModeLabel : (nwc.activeGameLockedToNwc ? 'RECONNEXION REQUISE' : 'DÉCONNECTÉ')}</span>
       </div>
 
       {!connection ? (
         <div className="nwc-connect-form">
+          {nwc.activeGameLockedToNwc && <div className="nwc-error" role="alert">Cette partie est déjà engagée en NWC réel. Reconnecte le wallet receive-only avant toute nouvelle cave/rebuy Lightning : NOIOU ne basculera pas en mock.</div>}
           <label>
             URI NWC dédiée à NOIOU
             <input
@@ -136,8 +140,13 @@ export default function NwcReceiveDiagnostic() {
           {invoice && <LightningInvoiceCard invoice={invoice} onSimulatePaid={() => void run(checkInvoice)} />}
 
           <div className="nwc-test-box">
-            <strong>{nwc.liveGameReceiptsArmed ? 'Caves réelles armées' : 'Caves réelles désarmées'}</strong>
-            {!nwc.liveGameReceiptsArmed ? (
+            <strong>{nwc.activeGameLockedToNwc ? 'Partie active verrouillée en NWC réel' : nwc.liveGameReceiptsArmed ? 'Caves réelles armées' : 'Caves réelles désarmées'}</strong>
+            {nwc.activeGameLockedToNwc ? (
+              <>
+                <small>Le retour au mock est bloqué jusqu’à la clôture/réinitialisation de cette partie. Cela évite de mélanger de vraies caves et des caves simulées après une reconnexion.</small>
+                <button disabled>Mode réel verrouillé pour cette partie</button>
+              </>
+            ) : !nwc.liveGameReceiptsArmed ? (
               <>
                 <label className="check">
                   <input type="checkbox" checked={acknowledged} onChange={(event) => setAcknowledged(event.target.checked)} />
@@ -146,9 +155,9 @@ export default function NwcReceiveDiagnostic() {
                 <button disabled={!acknowledged} onClick={() => void run(async () => arm())}>Armer les caves réelles</button>
               </>
             ) : (
-              <button onClick={disarm}>Désarmer les caves réelles</button>
+              <button onClick={() => void run(async () => disarm())}>Désarmer les caves réelles</button>
             )}
-            <small>L’armement est volontairement volatil : reconnexion ou rechargement = désarmé. Aucun secret NWC n’est persisté.</small>
+            <small>L’armement initial est volatil et n’enregistre aucun secret NWC. Dès qu’une partie est engagée en NWC réel, le mode réel reste verrouillé pour empêcher un fallback mock silencieux.</small>
           </div>
         </>
       )}
