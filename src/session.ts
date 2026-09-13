@@ -78,3 +78,31 @@ export function saveSession(storage: SessionStorageWriter, snapshot: SessionSnap
 export function clearSession(storage: SessionStorageWriter): void {
   storage.removeItem(SESSION_STORAGE_KEY);
 }
+
+/**
+ * Returns true when an active session has already committed to real receive-only NWC receipts.
+ * The GAME_CREATED ledger event is the durable source for sessions created before the Game
+ * object gained an explicit lightningReceiveMode field. A persisted NWC invoice is an extra
+ * fail-safe so a partially migrated/restored session can never silently fall back to mock.
+ */
+export function sessionRequiresNwcReceipts(snapshot: SessionSnapshot | null): boolean {
+  const game = snapshot?.game;
+  if (!game || (game.status !== 'OPEN' && game.status !== 'SETTLING')) return false;
+
+  if (game.lightningReceiveMode === 'NWC_RECEIVE_ONLY') return true;
+
+  const created = snapshot.ledger.find((event) => event.gameId === game.id && event.type === 'GAME_CREATED');
+  if (created?.payload.lightningReceiveMode === 'NWC_RECEIVE_ONLY') return true;
+
+  return Object.values(snapshot.mockInvoices).some((invoice) => invoice.source === 'NWC');
+}
+
+export function storageRequiresNwcReceipts(storage: SessionStorageReader): boolean {
+  try {
+    return sessionRequiresNwcReceipts(loadSession(storage));
+  } catch {
+    // A malformed/tampered session is handled by the app's existing integrity gates. Do not
+    // infer permission to use real funds from data that cannot be parsed.
+    return false;
+  }
+}
