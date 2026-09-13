@@ -23,6 +23,8 @@ NOIOU is a settlement companion for **physical** poker games. It does not deal c
 - mock Lightning fallback with scannable QR codes;
 - **real NWC receive-only buy-ins and rebuys** using `get_info`, `make_invoice` and `lookup_invoice`;
 - real NWC receipts credit the organizer's wallet directly; NOIOU never receives or holds the sats;
+- wallet connection starts diagnostic-only: **real game receipts require explicit arming**;
+- once an active game is committed to real NWC receipts, disconnect/reload cannot silently fall back to mock;
 - a Lightning contribution becomes `PAID` only after the wallet reports the invoice settled;
 - hard rejection of NWC connections exposing outgoing payment permissions;
 - NWC credential kept only in volatile browser memory, never in backups or the game ledger;
@@ -49,7 +51,7 @@ npm test
 npm run build
 ```
 
-A connected receive-only NWC wallet can now create real game invoices. The NWC URI/secret is never persisted: after reload, reconnect the same wallet before checking an outstanding real invoice. Real outgoing payouts are not executed by NOIOU.
+A receive-only NWC wallet can be connected for diagnostics without enabling real caves. Real game receipts require an explicit acknowledgement/arming action. If an active game has already committed to NWC real receipts, NOIOU keeps that mode locked across disconnect/reload and requires the wallet to be reconnected instead of silently switching to mock. The NWC URI/secret itself is never persisted. Real outgoing payouts are not executed by NOIOU.
 
 Before a physical dry run, read `docs/TABLE_TEST.md`. NWC security constraints are in `docs/NWC_SECURITY.md`.
 
