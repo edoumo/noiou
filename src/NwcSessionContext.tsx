@@ -100,8 +100,11 @@ export function NwcSessionProvider({ children }: { children: ReactNode }) {
         setLiveGameReceiptsArmed(true);
       },
       disarmLiveGameReceipts() {
-        const stillRequired = activeGameLockedToNwc || readActiveGameNwcLock();
-        if (stillRequired) throw new Error('Cette partie a déjà utilisé/validé le mode NWC réel : impossible de revenir au mock avant sa clôture/réinitialisation');
+        // The persisted active session is authoritative. This also lets an in-memory lock be
+        // released after the game has been closed/reset without requiring a page reload.
+        if (readActiveGameNwcLock()) {
+          throw new Error('Cette partie a déjà utilisé/validé le mode NWC réel : impossible de revenir au mock avant sa clôture/réinitialisation');
+        }
         setLiveGameReceiptsArmed(false);
         setActiveGameLockedToNwc(false);
       },
