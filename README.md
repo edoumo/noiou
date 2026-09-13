@@ -20,7 +20,10 @@ NOIOU is a settlement companion for **physical** poker games. It does not deal c
 - mobile-first React/TypeScript interface with a four-step table workflow;
 - PWA manifest and production service worker shell;
 - cash buy-ins and rebuys;
-- mock Lightning invoices with scannable QR codes and mock outgoing payments (no real sats);
+- mock Lightning invoices with scannable QR codes and mock outgoing payments;
+- isolated **real NWC receive-only diagnostic** using `get_info`, `make_invoice` and `lookup_invoice`;
+- hard rejection of NWC connections exposing outgoing payment permissions;
+- NWC credential kept only in volatile browser memory, never in backups or the game ledger;
 - EUR/USD/SATS settlement with a locked manual fiat/BTC rate in the prototype;
 - final physical chip reconciliation and settlement blocking on mismatch;
 - explicit player payout confirmation and game-close gate;
@@ -29,8 +32,8 @@ NOIOU is a settlement companion for **physical** poker games. It does not deal c
 - automatic local session recovery after reload/crash;
 - portable JSON backups with SHA-256 integrity and audit-ledger verification;
 - framework-independent domain/settlement logic;
-- `LightningAdapter` boundary for future NWC and optional LNbits adapters;
-- guarded NWC URI/policy groundwork with **live outgoing payments disabled**;
+- `LightningAdapter` boundary for NWC and future optional LNbits adapters;
+- real outgoing NWC payments remain **disabled by design**;
 - CI: production dependency audit, strict typecheck, tests and production build.
 
 ## Development
@@ -42,7 +45,7 @@ npm test
 npm run build
 ```
 
-No real-wallet integration is enabled. Do not use this private prototype with real funds.
+The NWC diagnostic may create and receive a real Lightning payment, but it is deliberately outside the game pot and ledger. Real NWC buy-ins/rebuys and real payouts are **not** enabled yet.
 
 Before a physical dry run, read `docs/TABLE_TEST.md`. NWC security constraints are in `docs/NWC_SECURITY.md`.
 

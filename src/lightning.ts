@@ -1,8 +1,11 @@
+export type LightningInvoiceSource = 'MOCK' | 'NWC';
+
 export interface LightningInvoice {
   id: string;
   request: string;
   sats: number;
   status: 'PENDING' | 'PAID' | 'EXPIRED';
+  source?: LightningInvoiceSource;
 }
 
 export interface PreparedLightningPayment {
@@ -29,7 +32,7 @@ export class MockLightningAdapter implements LightningAdapter {
 
   restoreInvoice(invoice: LightningInvoice): void {
     if (!invoice.id.trim() || !Number.isInteger(invoice.sats) || invoice.sats <= 0) throw new Error('Invalid mock invoice snapshot');
-    this.invoices.set(invoice.id, { ...invoice });
+    this.invoices.set(invoice.id, { ...invoice, source: invoice.source ?? 'MOCK' });
   }
 
   async createInvoice(sats: number, memo = 'NOIOU buy-in'): Promise<LightningInvoice> {
@@ -40,6 +43,7 @@ export class MockLightningAdapter implements LightningAdapter {
       request: `lnmock:${id}:${sats}:${encodeURIComponent(memo)}`,
       sats,
       status: 'PENDING',
+      source: 'MOCK',
     };
     this.invoices.set(id, invoice);
     return invoice;
