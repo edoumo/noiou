@@ -143,8 +143,8 @@ export default function NwcReceiveDiagnostic() {
             <strong>{nwc.activeGameLockedToNwc ? 'Partie active verrouillée en NWC réel' : nwc.liveGameReceiptsArmed ? 'Caves réelles armées' : 'Caves réelles désarmées'}</strong>
             {nwc.activeGameLockedToNwc ? (
               <>
-                <small>Le retour au mock est bloqué jusqu’à la clôture/réinitialisation de cette partie. Cela évite de mélanger de vraies caves et des caves simulées après une reconnexion.</small>
-                <button disabled>Mode réel verrouillé pour cette partie</button>
+                <small>Le retour au mock est bloqué tant que la session locale indique une partie NWC réelle active. Après clôture/réinitialisation, le bouton ci-dessous libère l’état en mémoire.</small>
+                <button onClick={() => void run(async () => disarm())}>Libérer le verrou après clôture/réinitialisation</button>
               </>
             ) : !nwc.liveGameReceiptsArmed ? (
               <>
