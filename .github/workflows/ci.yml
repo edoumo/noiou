@@ -18,3 +18,27 @@ jobs:
       - run: npm run typecheck
       - run: npm test
       - run: npm run build
+      - run: docker build -t noiou-alpha-ci .
+      - name: Smoke-test hardened alpha container
+        run: |
+          set -euo pipefail
+          docker run -d --name noiou-alpha-ci \
+            --read-only \
+            --tmpfs /var/cache/nginx \
+            --tmpfs /var/run \
+            --tmpfs /tmp \
+            --cap-drop ALL \
+            --cap-add CHOWN \
+            --cap-add SETGID \
+            --cap-add SETUID \
+            --cap-add NET_BIND_SERVICE \
+            -p 127.0.0.1:18080:80 \
+            noiou-alpha-ci
+          trap 'docker logs noiou-alpha-ci || true; docker rm -f noiou-alpha-ci || true' EXIT
+          for attempt in $(seq 1 20); do
+            if curl --fail --silent http://127.0.0.1:18080/healthz | grep -qx ok; then
+              exit 0
+            fi
+            sleep 1
+          done
+          exit 1
