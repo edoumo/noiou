@@ -6,6 +6,22 @@ export type ContributionKind = 'BUYIN' | 'REBUY';
 export type ContributionStatus = 'CREATED' | 'PENDING' | 'PAID' | 'CANCELLED';
 export type PayoutStatus = 'PENDING' | 'CONFIRMED';
 
+export type LedgerEventType =
+  | 'GAME_CREATED'
+  | 'PLAYER_JOINED'
+  | 'BUYIN_CREATED'
+  | 'REBUY_CREATED'
+  | 'LIGHTNING_INVOICE_CREATED'
+  | 'CASH_CONFIRMED'
+  | 'CONTRIBUTION_PAID'
+  | 'SETTLEMENT_STARTED'
+  | 'FINAL_STACKS_RECORDED'
+  | 'SETTLEMENT_CALCULATED'
+  | 'PAYOUT_CONFIRMED'
+  | 'DEALER_COMPENSATION_CONFIRMED'
+  | 'PROJECT_DONATION_RECORDED'
+  | 'GAME_CLOSED';
+
 export interface Money {
   amount: number;
   currency: Currency;
@@ -78,4 +94,23 @@ export interface SettlementResult {
   distributableAmount: number;
   dealerCompensation: number;
   payouts: Payout[];
+}
+
+export interface LedgerEvent {
+  id: string;
+  gameId: string;
+  sequence: number;
+  type: LedgerEventType;
+  at: string;
+  payload: Record<string, unknown>;
+  previousHash: string;
+  hash: string;
+}
+
+export interface LedgerEventDraft {
+  id?: string;
+  gameId: string;
+  type: LedgerEventType;
+  at?: string;
+  payload?: Record<string, unknown>;
 }
