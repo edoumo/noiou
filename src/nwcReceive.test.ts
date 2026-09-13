@@ -61,6 +61,20 @@ describe('NwcReceiveOnlyAdapter', () => {
     await expect(adapter.getInvoiceStatus(invoice.id)).resolves.toBe('PAID');
   });
 
+  it('can restore a persisted public invoice after reconnect without persisting the NWC secret', async () => {
+    const firstClient = fakeClient();
+    const first = await NwcReceiveOnlyAdapter.connect(uri, async () => firstClient);
+    const invoice = await first.createInvoice(123, 'NOIOU game buy-in');
+    first.close();
+
+    const secondClient = fakeClient();
+    const reconnected = await NwcReceiveOnlyAdapter.connect(uri, async () => secondClient);
+    reconnected.restoreInvoice(invoice);
+
+    await expect(reconnected.getInvoiceStatus(invoice.id)).resolves.toBe('PAID');
+    expect(secondClient.lookupInvoice).toHaveBeenCalledWith({ payment_hash: 'a'.repeat(64) });
+  });
+
   it('hard-blocks every outgoing payment path', async () => {
     const adapter = await NwcReceiveOnlyAdapter.connect(uri, async () => fakeClient());
     await expect(adapter.preparePayment('lnbc1...', 100)).rejects.toThrow(/disabled/i);
