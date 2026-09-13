@@ -56,6 +56,22 @@ describe('settlement', () => {
     const result = calculateSettlement(game({ dealer:{ enabled:true, mode:'PERCENT', value:10 } }), players, [paid('1','a'), paid('2','b')], [{ playerId:'a', chips:30 }, { playerId:'b', chips:10 }]);
     expect(result.dealerCompensation).toBe(4);
     expect(result.distributableAmount).toBe(36);
-    expect(result.payouts.reduce((s,p)=>s+p.amount,0)).toBe(36);
+    expect(result.payouts.reduce((sum,payout)=>sum+payout.amount,0)).toBe(36);
+  });
+
+  it('rounds SATS as integer amounts and preserves conservation', () => {
+    const satsGame = game({ currency:'SATS', buyInAmount:1001, rebuyAmount:1001, chipValue:1 });
+    const result = calculateSettlement(satsGame, players, [paid('1','a',1001), paid('2','b',1001)], [{ playerId:'a', chips:1000 }, { playerId:'b', chips:1002 }]);
+    expect(result.payouts.every((payout) => Number.isInteger(payout.amount))).toBe(true);
+    expect(result.payouts.reduce((sum,payout)=>sum+payout.amount,0) + result.dealerCompensation).toBe(2002);
+  });
+
+  it('rejects negative or fractional physical chip counts', () => {
+    expect(() => calculateSettlement(game(), players, [paid('1','a')], [{ playerId:'a', chips:-1 }])).toThrow(/non-negative integers/);
+    expect(() => calculateSettlement(game(), players, [paid('1','a')], [{ playerId:'a', chips:19.5 }])).toThrow(/non-negative integers/);
+  });
+
+  it('rejects duplicate final stacks for the same player', () => {
+    expect(() => calculateSettlement(game(), players, [paid('1','a')], [{ playerId:'a', chips:10 }, { playerId:'a', chips:10 }])).toThrow(/Duplicate/);
   });
 });
