@@ -5,6 +5,7 @@ export type DealerMode = 'NONE' | 'FIXED' | 'PERCENT' | 'END_OF_GAME';
 export type ContributionKind = 'BUYIN' | 'REBUY';
 export type ContributionStatus = 'CREATED' | 'PENDING' | 'PAID' | 'CANCELLED';
 export type PayoutStatus = 'PENDING' | 'CONFIRMED';
+export type LightningReceiveMode = 'MOCK' | 'NWC_RECEIVE_ONLY';
 
 export type LedgerEventType =
   | 'GAME_CREATED'
@@ -53,6 +54,7 @@ export interface Game {
   chipValue: number;
   status: GameStatus;
   dealer: DealerRule;
+  lightningReceiveMode?: LightningReceiveMode;
   lockedBtcFiatRate?: number;
   createdAt: string;
 }

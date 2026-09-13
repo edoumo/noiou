@@ -1,5 +1,14 @@
 import { describe, expect, it } from 'vitest';
-import { clearSession, createEmptySession, loadSession, parseSession, saveSession, SESSION_STORAGE_KEY } from './session';
+import {
+  clearSession,
+  createEmptySession,
+  loadSession,
+  parseSession,
+  saveSession,
+  SESSION_STORAGE_KEY,
+  sessionRequiresNwcReceipts,
+  storageRequiresNwcReceipts,
+} from './session';
 
 function memoryStorage() {
   const data = new Map<string, string>();
@@ -8,6 +17,22 @@ function memoryStorage() {
     setItem(key: string, value: string) { data.set(key, value); },
     removeItem(key: string) { data.delete(key); },
   };
+}
+
+function openGameSnapshot() {
+  const snapshot = createEmptySession('2026-09-13T12:00:00Z');
+  snapshot.game = {
+    id: 'game-1',
+    currency: 'SATS',
+    buyInAmount: 1000,
+    rebuyEnabled: true,
+    rebuyAmount: 1000,
+    chipValue: 1,
+    status: 'OPEN',
+    dealer: { enabled: false, mode: 'NONE' },
+    createdAt: '2026-09-13T12:00:00Z',
+  };
+  return snapshot;
 }
 
 describe('session persistence', () => {
@@ -37,5 +62,54 @@ describe('session persistence', () => {
     clearSession(storage);
     expect(storage.getItem(SESSION_STORAGE_KEY)).toBeNull();
     expect(storage.getItem('other')).toBe('keep');
+  });
+});
+
+describe('live NWC mode recovery', () => {
+  it('detects the durable GAME_CREATED NWC mode after reload', () => {
+    const snapshot = openGameSnapshot();
+    snapshot.ledger.push({
+      id: 'event-1',
+      gameId: 'game-1',
+      sequence: 1,
+      type: 'GAME_CREATED',
+      at: '2026-09-13T12:00:00Z',
+      payload: { lightningReceiveMode: 'NWC_RECEIVE_ONLY' },
+      previousHash: '',
+      hash: 'hash',
+    });
+
+    expect(sessionRequiresNwcReceipts(snapshot)).toBe(true);
+  });
+
+  it('uses a persisted NWC invoice as a fail-safe lock', () => {
+    const snapshot = openGameSnapshot();
+    snapshot.mockInvoices['contribution-1'] = {
+      id: 'a'.repeat(64),
+      request: 'lnbc1real',
+      sats: 1000,
+      status: 'PENDING',
+      source: 'NWC',
+    };
+
+    expect(sessionRequiresNwcReceipts(snapshot)).toBe(true);
+  });
+
+  it('does not keep the lock after the game is closed', () => {
+    const snapshot = openGameSnapshot();
+    snapshot.game!.status = 'CLOSED';
+    snapshot.game!.lightningReceiveMode = 'NWC_RECEIVE_ONLY';
+    expect(sessionRequiresNwcReceipts(snapshot)).toBe(false);
+  });
+
+  it('recovers the lock from storage but never guesses from malformed data', () => {
+    const storage = memoryStorage();
+    const snapshot = openGameSnapshot();
+    snapshot.game!.lightningReceiveMode = 'NWC_RECEIVE_ONLY';
+    saveSession(storage, snapshot);
+    expect(storageRequiresNwcReceipts(storage)).toBe(true);
+
+    storage.setItem(SESSION_STORAGE_KEY, '{bad json');
+    expect(storageRequiresNwcReceipts(storage)).toBe(false);
   });
 });
