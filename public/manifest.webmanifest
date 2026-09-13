@@ -1,0 +1,9 @@
+{
+  "name": "NOIOU",
+  "short_name": "NOIOU",
+  "start_url": "/",
+  "display": "standalone",
+  "background_color": "#111827",
+  "theme_color": "#111827",
+  "description": "Open-source settlement companion for physical poker games."
+}
