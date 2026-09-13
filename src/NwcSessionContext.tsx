@@ -7,9 +7,13 @@ export const MAX_LIVE_GAME_INVOICE_SATS = 250_000;
 interface NwcSessionValue {
   connected: boolean;
   connection: NwcReceiveConnectionInfo | null;
+  liveGameReceiptsArmed: boolean;
   connect(uri: string): Promise<NwcReceiveConnectionInfo>;
   disconnect(): void;
-  createInvoice(sats: number, memo?: string): Promise<LightningInvoice>;
+  armLiveGameReceipts(): void;
+  disarmLiveGameReceipts(): void;
+  createDiagnosticInvoice(sats: number, memo?: string): Promise<LightningInvoice>;
+  createGameInvoice(sats: number, memo?: string): Promise<LightningInvoice>;
   getInvoiceStatus(invoice: LightningInvoice): Promise<LightningInvoice['status']>;
 }
 
@@ -25,6 +29,7 @@ export function assertLiveGameInvoiceAmount(sats: number): void {
 export function NwcSessionProvider({ children }: { children: ReactNode }) {
   const adapterRef = useRef<NwcReceiveOnlyAdapter | null>(null);
   const [connection, setConnection] = useState<NwcReceiveConnectionInfo | null>(null);
+  const [liveGameReceiptsArmed, setLiveGameReceiptsArmed] = useState(false);
 
   useEffect(() => () => {
     adapterRef.current?.close();
@@ -34,6 +39,7 @@ export function NwcSessionProvider({ children }: { children: ReactNode }) {
   const value = useMemo<NwcSessionValue>(() => ({
     connected: Boolean(connection),
     connection,
+    liveGameReceiptsArmed,
     async connect(uri: string) {
       const secretUri = uri.trim();
       if (!secretUri) throw new Error('URI NWC manquante');
@@ -42,6 +48,7 @@ export function NwcSessionProvider({ children }: { children: ReactNode }) {
       const previous = adapterRef.current;
       adapterRef.current = next;
       setConnection(next.connection);
+      setLiveGameReceiptsArmed(false);
       previous?.close();
       return next.connection;
     },
@@ -49,10 +56,24 @@ export function NwcSessionProvider({ children }: { children: ReactNode }) {
       adapterRef.current?.close();
       adapterRef.current = null;
       setConnection(null);
+      setLiveGameReceiptsArmed(false);
     },
-    async createInvoice(sats: number, memo?: string) {
+    armLiveGameReceipts() {
+      if (!adapterRef.current || !connection) throw new Error('Connecte un wallet NWC receive-only avant d’armer les caves réelles');
+      setLiveGameReceiptsArmed(true);
+    },
+    disarmLiveGameReceipts() {
+      setLiveGameReceiptsArmed(false);
+    },
+    async createDiagnosticInvoice(sats: number, memo?: string) {
       const adapter = adapterRef.current;
       if (!adapter) throw new Error('Reconnecte un wallet NWC receive-only avant de créer une invoice réelle');
+      return adapter.createInvoice(sats, memo);
+    },
+    async createGameInvoice(sats: number, memo?: string) {
+      const adapter = adapterRef.current;
+      if (!adapter) throw new Error('Reconnecte un wallet NWC receive-only avant de créer une cave réelle');
+      if (!liveGameReceiptsArmed) throw new Error('Les caves Lightning réelles ne sont pas armées');
       assertLiveGameInvoiceAmount(sats);
       return adapter.createInvoice(sats, memo);
     },
@@ -63,7 +84,7 @@ export function NwcSessionProvider({ children }: { children: ReactNode }) {
       adapter.restoreInvoice(invoice);
       return adapter.getInvoiceStatus(invoice.id);
     },
-  }), [connection]);
+  }), [connection, liveGameReceiptsArmed]);
 
   return <NwcSessionContext.Provider value={value}>{children}</NwcSessionContext.Provider>;
 }
