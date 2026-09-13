@@ -11,6 +11,13 @@ describe('MockLightningAdapter', () => {
     expect(await adapter.getInvoiceStatus(invoice.id)).toBe('PAID');
   });
 
+  it('restores a pending invoice after a local session reload', async () => {
+    const adapter = new MockLightningAdapter([{ id: 'inv-1', request: 'lnmock:inv-1:321:test', sats: 321, status: 'PENDING' }]);
+    expect(await adapter.getInvoiceStatus('inv-1')).toBe('PENDING');
+    adapter.markInvoicePaid('inv-1');
+    expect(await adapter.getInvoiceStatus('inv-1')).toBe('PAID');
+  });
+
   it('rejects invalid invoice and payment amounts', async () => {
     const adapter = new MockLightningAdapter();
     await expect(adapter.createInvoice(0)).rejects.toThrow(/positive integer/);
