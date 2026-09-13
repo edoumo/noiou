@@ -1,12 +1,14 @@
 # Security policy (private incubation)
 
-NOIOU is not production-ready and must not be used with real funds during private incubation.
+NOIOU is not production-ready. Real funds are permitted only for deliberately tiny, controlled private-alpha **receive-only NWC** tests under the safeguards below. Public/commercial use and autonomous outgoing Lightning payments remain out of scope.
 
 ## Security invariants
 
 - No seeds or private keys in the server, repository, logs, analytics, or support tooling.
 - No omnibus wallet and no internal BTC balances held on behalf of users.
-- No real Lightning adapter is enabled in the private bootstrap.
+- Real Lightning game receipts use receive-only NWC permissions; outgoing payment capabilities are rejected.
+- The NWC credential stays in browser memory and is never stored in the generic session snapshot, backup, audit ledger, container environment, or static bundle.
+- Real NWC game receipts are **SATS-only** in the current alpha; EUR/USD remain mock-only until money representation is migrated away from generic JavaScript-number fiat arithmetic.
 - All money-changing operations must be idempotent.
 - A paid contribution may issue value once only.
 - One external Lightning invoice reference cannot be attached to multiple contributions.
@@ -16,39 +18,49 @@ NOIOU is not production-ready and must not be used with real funds during privat
 - Project donations are outside the game-pot accounting domain.
 - Dealer compensation must be explicit in the game configuration and separately confirmed.
 - Game closure is impossible while a non-zero player payout or dealer compensation remains unconfirmed.
+- Outgoing Lightning settlements are manual operator actions performed in the organizer's own wallet; NOIOU only records the confirmation afterward.
 
 ## Current controls
 
 - `LightningAdapter` keeps wallet integration outside business logic.
 - `MockLightningAdapter` supports development without real sats.
-- contribution guards reject duplicate invoice references and invalid state changes;
-- settlement tests exercise conservation, cash/Lightning mixes, rebuys, invalid stacks and sats rounding;
-- a SHA-256 chained append-only event ledger detects payload modification, event deletion and reordering;
-- CI runs strict TypeScript checking, automated tests and production build on every bootstrap branch update/PR.
+- `NwcReceiveOnlyAdapter` supports real invoice creation/status lookup while rejecting connections that expose outgoing-payment methods.
+- Connecting a wallet does not by itself arm real game receipts; arming is explicit.
+- Once a live game is committed to real NWC receipts, reload/disconnect cannot silently fall back to mock.
+- Real NWC game invoice creation fails closed unless the persisted active game is readable and denominated in SATS.
+- Per-invoice real-game receipts are capped by `MAX_LIVE_GAME_INVOICE_SATS`; first real tests should stay far below that ceiling.
+- Contribution guards reject duplicate invoice references and invalid state changes.
+- Settlement tests exercise conservation, cash/Lightning mixes, rebuys, invalid stacks and sats rounding.
+- A SHA-256 chained append-only event ledger detects payload modification, event deletion and reordering.
+- Portable backups include an integrity digest and ledger verification; NWC credentials are excluded.
+- CI runs production dependency audit, strict TypeScript checking, automated tests, application build, production Docker build, and a hardened-container health smoke test.
+- The private alpha is deployed behind an authenticated origin and Cloudflare Tunnel with no application host port published.
 
 ## Threats before public release
 
-- replayed/duplicated Lightning invoices and webhook/event replay;
+- replayed/duplicated Lightning invoices and event replay;
 - duplicate cash confirmations and organizer fraud (cash confirmation is necessarily a human attestation);
 - double payouts and concurrent-device race conditions;
 - tampering with final stacks or a locked exchange rate;
 - compromised NWC secrets or over-broad wallet permissions;
 - XSS, CSRF where applicable, IDOR and unsafe deep links;
-- local-device compromise and extraction of persisted wallet connection material;
+- local-device compromise and extraction of in-memory wallet connection material;
 - crash recovery during invoice/payment/settlement transitions;
 - durable ledger alteration, rollback and backup restoration semantics;
-- dependency/supply-chain compromise;
+- dependency/supply-chain compromise and reproducible dependency locking;
 - malicious or misleading forks impersonating the official NOIOU application.
 
 ## Real-wallet gate
 
-Before enabling NWC, LNbits or any other real-wallet integration, require a dedicated review covering:
+Receive-only NWC is enabled only for private-alpha inbound receipts. Any expansion of real-wallet capabilities requires a dedicated review covering:
 
 1. least-privilege wallet capabilities;
 2. secret storage and lifecycle;
-3. explicit user approval before outgoing payments;
-4. idempotency and replay protection;
-5. recovery after partial failure;
-6. regulatory boundary review.
+3. exact integer money representation for every enabled currency;
+4. explicit user approval before any outgoing payment capability;
+5. idempotency and replay protection;
+6. recovery after partial failure;
+7. browser/device compromise and session restoration;
+8. regulatory boundary review.
 
 No statement in this repository should claim that the software is exempt from MiCA or other regulation. The architecture is intended to minimize custody and regulated-service exposure; legal validation is required before commercial/public operation.
