@@ -2,7 +2,7 @@
 
 Nostr Wallet Connect is NOIOU's preferred non-custodial Lightning integration.
 
-A **private receive-only diagnostic** is now implemented. It can connect to a real NWC wallet, create a real Lightning invoice and verify its settlement. This diagnostic is deliberately isolated from game buy-ins, the game ledger and payouts.
+A receive-only NWC connection can now be used for **real game buy-ins and rebuys**. The organizer's wallet creates the BOLT11 invoice and receives the sats directly. NOIOU only creates and verifies invoices through the delegated receive-side NWC capabilities.
 
 ## Current policy
 
@@ -24,35 +24,41 @@ A connection exposing an outgoing payment method is rejected instead of silently
 
 An NWC URI contains credential material.
 
-The private diagnostic keeps the URI only in volatile browser memory for the lifetime of the connection. The input is cleared immediately when a connection attempt begins. Reloading the page therefore requires reconnecting the wallet.
+NOIOU keeps the live NWC client only in volatile browser memory. The URI input is cleared immediately when a connection attempt begins. Reloading the page therefore requires reconnecting the wallet.
 
 The NWC secret must never be:
 
 - committed to git;
 - written to the audit ledger;
-- written to localStorage/session backups by the diagnostic;
+- written to localStorage or portable session backups;
 - sent to a hosted NOIOU backend;
 - copied into crash reports or telemetry;
 - displayed after connection.
 
 Persistence is intentionally not implemented before a dedicated browser/PWA secret-storage review.
 
-## Real-funds boundary
+## Game receive path
 
-The diagnostic can receive real sats. It is explicitly marked as outside the game accounting model and caps a diagnostic invoice at 1000 sats.
+When a receive-only wallet is connected, a Lightning cave or rebuy follows this sequence:
 
-At this stage:
+1. NOIOU calculates the required amount in sats from the game currency and the rate locked for the game.
+2. NOIOU asks the organizer's wallet to create a BOLT11 invoice through `make_invoice`.
+3. The public invoice/payment hash and its `NWC` source may be stored with the local game session; the NWC secret is not stored.
+4. The contribution remains `PENDING`; no chips should be treated as issued yet.
+5. NOIOU calls `lookup_invoice` when the organizer asks to verify payment.
+6. Only a wallet result mapped to `PAID` changes the contribution to paid and allows the chips to count as issued.
 
-- real NWC invoices are **not** used for poker buy-ins or rebuys;
-- real NWC receipts do not alter the game pot;
-- no real payout can be executed by NOIOU;
-- no NWC secret is persisted or exported.
+After reload or import, an outstanding NWC invoice remains in the game backup, but the organizer must reconnect the same receive-only wallet before NOIOU can verify it.
 
-This separation allows transport/capability testing without creating a half-real game settlement path.
+The private alpha caps each real game invoice at **250,000 sats**. This is a safety guard, not a protocol limitation.
+
+For EUR/USD games the current prototype uses the manually locked BTC/fiat rate. The organizer must verify that rate before starting a real-funds table test.
 
 ## Outgoing payments
 
-Automatic server-side payouts are out of scope.
+NOIOU does not execute real outgoing Lightning payments.
+
+Player and dealer Lightning payouts are performed manually in the organizer's wallet. NOIOU only records the organizer's explicit confirmation that the external wallet payment was completed.
 
 Before enabling any outgoing NWC payment path, NOIOU requires a dedicated review of:
 
