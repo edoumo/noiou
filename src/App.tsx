@@ -24,6 +24,7 @@ import {
 } from './game';
 import { appendLedgerEvent, verifyLedger } from './ledger';
 import LightningInvoiceCard from './LightningInvoiceCard';
+import ManualLightningPayoutCard from './ManualLightningPayoutCard';
 import { MockLightningAdapter, type LightningInvoice } from './lightning';
 import { MAX_LIVE_GAME_INVOICE_SATS, useNwcSession } from './NwcSessionContext';
 import {
@@ -367,16 +368,23 @@ export default function App() {
     });
   }
 
+  function choosePayoutMethod(player: Player, method: PaymentMethod) {
+    if (method === 'LIGHTNING' && !player.lightningAddress) throw new Error(`Ajoute une destination Lightning pour ${player.nickname} avant de choisir ce mode`);
+    setPayouts((current) => current.map((payout) => payout.playerId === player.id && payout.status === 'PENDING' ? { ...payout, method } : payout));
+  }
+
   async function confirmPlayerPayout(payout: Payout) {
     if (!game || !settlement?.balanced) throw new Error('Le règlement n’est pas prêt');
     await assertLedgerIntegrity();
     if (payout.status === 'CONFIRMED') return;
     const player = players.find((candidate) => candidate.id === payout.playerId);
     if (!player) throw new Error('Joueur introuvable');
+    if (payout.method === 'ANY') throw new Error(`Choisis d’abord le mode de règlement de ${player.nickname}`);
 
+    let sats: number | undefined;
     if (payout.method === 'LIGHTNING') {
       if (!player.lightningAddress) throw new Error(`Destination Lightning manquante pour ${player.nickname}`);
-      const sats = toSats(payout.amount, game);
+      sats = toSats(payout.amount, game);
       if (sats <= 0) throw new Error('Le paiement Lightning converti vaut 0 sat');
     }
 
@@ -385,6 +393,7 @@ export default function App() {
       playerId: payout.playerId,
       method: payout.method,
       amount: payout.amount,
+      sats: sats ?? null,
       execution: payout.method === 'LIGHTNING' ? 'MANUAL_EXTERNAL_WALLET' : 'CASH_CONFIRMATION',
     });
   }
@@ -394,15 +403,17 @@ export default function App() {
     await assertLedgerIntegrity();
     if (dealerPaid) return;
     const method = game.dealer.preferredPayment ?? 'CASH';
+    let sats: number | undefined;
     if (method === 'LIGHTNING') {
       if (!game.dealer.lightningAddress) throw new Error('Destination Lightning du dealer manquante');
-      const sats = toSats(settlement.dealerCompensation, game);
+      sats = toSats(settlement.dealerCompensation, game);
       if (sats <= 0) throw new Error('La rémunération Lightning du dealer vaut 0 sat');
     }
     setDealerPaid(true);
     await record(game.id, 'DEALER_COMPENSATION_CONFIRMED', {
       amount: settlement.dealerCompensation,
       method,
+      sats: sats ?? null,
       execution: method === 'LIGHTNING' ? 'MANUAL_EXTERNAL_WALLET' : 'CASH_CONFIRMATION',
     });
   }
@@ -476,7 +487,14 @@ export default function App() {
   const closure = checkGameClosure(settlement, payouts, dealerPaid);
   const totalDonations = projectDonations.reduce((sum, donation) => sum + donation.sats, 0);
   const step = workflowStep(game);
-  const lightningButtonLabel = nwc.connected ? 'Lightning réel' : 'Lightning mock';
+  const lightningButtonLabel = nwc.connected ? (nwc.transportConnected ? 'Lightning réel' : 'Lightning réel · reconnecter') : 'Lightning mock';
+  const nwcMode = nwc.activeGameLockedToNwc && !nwc.transportConnected
+    ? 'RECONNECT_REQUIRED'
+    : nwc.liveGameReceiptsArmed && nwc.transportConnected
+      ? 'LIVE_ARMED'
+      : nwc.transportConnected
+        ? 'DIAGNOSTIC'
+        : 'MOCK';
 
   return (
     <main className="shell">
@@ -494,7 +512,9 @@ export default function App() {
       </nav>
 
       {sessionRestored && <div className="session-note"><span>Session locale restaurée · aucun secret wallet n’est stocké. Une invoice NWC en attente nécessite de reconnecter le wallet pour vérifier son paiement.</span><button onClick={() => setSessionRestored(false)}>OK</button></div>}
-      {nwc.connected && <div className="session-note"><span>⚡ Réception NWC réelle activée{nwc.connection?.alias ? ` · ${nwc.connection.alias}` : ''}. Les caves/rebuys Lightning créditent directement le wallet de l’organisateur. Les payouts restent manuels hors NOIOU.</span></div>}
+      {nwcMode === 'LIVE_ARMED' && <div className="session-note live-note"><span>⚡ Réception NWC réelle armée{nwc.connection?.alias ? ` · ${nwc.connection.alias}` : ''}. Les caves/rebuys créditent directement le wallet de l’organisateur. Les payouts restent manuels hors NOIOU.</span></div>}
+      {nwcMode === 'RECONNECT_REQUIRED' && <div className="session-note reconnect-note"><span>⚠️ Cette partie est verrouillée en NWC réel mais le wallet est déconnecté. Reconnecte le même wallet receive-only avant toute nouvelle cave/rebuy ou vérification d’invoice.</span></div>}
+      {nwcMode === 'DIAGNOSTIC' && <div className="session-note"><span>Wallet NWC connecté en diagnostic uniquement. Les caves de partie restent en mock tant que tu n’armes pas explicitement la réception réelle.</span></div>}
       {game && <div className="save-note">Sauvegarde locale automatique {lastSavedAt ? `· ${new Date(lastSavedAt).toLocaleTimeString('fr-FR')}` : ''}</div>}
       {backupStatus && <div className="session-note"><span>{backupStatus}</span><button onClick={() => setBackupStatus('')}>OK</button></div>}
       {error && <div className="alert" role="alert">{error}</div>}
@@ -514,7 +534,7 @@ export default function App() {
 
       {!game && (
         <section className="card">
-          <div className="section-title"><h2>Créer la partie</h2><span>{nwc.connected ? 'Lightning réel en réception seule' : 'Lightning mock tant que NWC est déconnecté'}</span></div>
+          <div className="section-title"><h2>Créer la partie</h2><span>{nwc.connected ? 'Lightning réel en réception seule' : 'Lightning mock tant que NWC réel n’est pas armé'}</span></div>
           <div className="grid">
             <label>Devise
               <select value={currency} onChange={(event) => setCurrency(event.target.value as Currency)}>
@@ -576,10 +596,10 @@ export default function App() {
               <label>Pseudo<input value={nickname} onChange={(event) => setNickname(event.target.value)} placeholder="Alice" /></label>
               <label>Règlement préféré
                 <select value={preferredPayment} onChange={(event) => setPreferredPayment(event.target.value as PaymentMethod | 'ANY')}>
-                  <option value="CASH">Espèces</option><option value="LIGHTNING">Lightning</option><option value="ANY">Indifférent</option>
+                  <option value="CASH">Espèces</option><option value="LIGHTNING">Lightning</option><option value="ANY">À choisir à la fin</option>
                 </select>
               </label>
-              {(preferredPayment === 'LIGHTNING' || preferredPayment === 'ANY') && <label>Lightning Address (facultatif si ANY)<input value={lightningAddress} onChange={(event) => setLightningAddress(event.target.value)} placeholder="alice@wallet.example" /></label>}
+              {(preferredPayment === 'LIGHTNING' || preferredPayment === 'ANY') && <label>Lightning Address (facultatif si choix final en espèces)<input value={lightningAddress} onChange={(event) => setLightningAddress(event.target.value)} placeholder="alice@wallet.example" /></label>}
             </div>
             <button className="wide-mobile" onClick={() => void execute(addPlayer)}>Ajouter</button>
           </section>
@@ -627,13 +647,44 @@ export default function App() {
             {settlement.balanced && <p>Joueurs : {formatAmount(settlement.distributableAmount, game.currency)} · dealer : {formatAmount(settlement.dealerCompensation, game.currency)}</p>}
           </section>}
 
-          {settlement?.balanced && <section className="card">
-            <div className="section-title"><h2>Règlements</h2><span>Sorties Lightning = paiement manuel dans le wallet de l’organisateur</span></div>
+          {settlement?.balanced && <section className="card settlement-card">
+            <div className="section-title"><h2>Règlements</h2><span>Lightning = paiement manuel dans le wallet de l’organisateur</span></div>
+            <p className="muted settlement-help">Pour Lightning, copie l’instruction, paie dans ton wallet, puis coche la confirmation exacte. NOIOU n’a aucune permission de dépense.</p>
             <div className="payouts">{payouts.filter((payout) => payout.amount > 0).map((payout) => {
               const player = players.find((candidate) => candidate.id === payout.playerId)!;
-              return <div className="payout" key={payout.playerId}><span>{player.nickname}</span><strong>{formatAmount(payout.amount, game.currency)}</strong><small>{payout.method} · {payout.status}</small>{game.status !== 'CLOSED' && payout.status !== 'CONFIRMED' && <button onClick={() => void execute(() => confirmPlayerPayout(payout))}>{payout.method === 'LIGHTNING' ? 'Confirmer paiement effectué dans le wallet' : 'Confirmer remise espèces'}</button>}</div>;
+              return <div className="payout" key={payout.playerId}>
+                <span>{player.nickname}</span>
+                <strong>{formatAmount(payout.amount, game.currency)}</strong>
+                <small>{payout.method} · {payout.status}</small>
+                {game.status !== 'CLOSED' && payout.status !== 'CONFIRMED' && payout.method === 'ANY' && <div className="payout-choice">
+                  <strong>Comment veux-tu régler {player.nickname} ?</strong>
+                  <div className="actions">
+                    <button onClick={() => void execute(() => choosePayoutMethod(player, 'CASH'))}>Espèces</button>
+                    <button disabled={!player.lightningAddress} onClick={() => void execute(() => choosePayoutMethod(player, 'LIGHTNING'))}>Lightning{!player.lightningAddress ? ' · adresse manquante' : ''}</button>
+                  </div>
+                </div>}
+                {game.status !== 'CLOSED' && payout.status !== 'CONFIRMED' && payout.method === 'CASH' && <button onClick={() => void execute(() => confirmPlayerPayout(payout))}>Confirmer remise espèces</button>}
+                {game.status !== 'CLOSED' && payout.status !== 'CONFIRMED' && payout.method === 'LIGHTNING' && player.lightningAddress && <ManualLightningPayoutCard
+                  label={player.nickname}
+                  destination={player.lightningAddress}
+                  amount={payout.amount}
+                  currency={game.currency}
+                  lockedBtcFiatRate={game.lockedBtcFiatRate}
+                  onConfirm={() => void execute(() => confirmPlayerPayout(payout))}
+                />}
+              </div>;
             })}</div>
-            {settlement.dealerCompensation > 0 && <div className="dealer-line"><span>{game.dealer.label ?? 'Dealer'} · {game.dealer.preferredPayment ?? 'CASH'}</span><strong>{formatAmount(settlement.dealerCompensation, game.currency)}</strong><button disabled={dealerPaid || game.status === 'CLOSED'} onClick={() => void execute(confirmDealerCompensation)}>{dealerPaid ? 'Confirmé ✓' : (game.dealer.preferredPayment === 'LIGHTNING' ? 'Confirmer paiement effectué dans le wallet' : 'Confirmer rémunération')}</button></div>}
+            {settlement.dealerCompensation > 0 && <div className="dealer-line">
+              <div><span>{game.dealer.label ?? 'Dealer'} · {game.dealer.preferredPayment ?? 'CASH'}</span><strong>{formatAmount(settlement.dealerCompensation, game.currency)}</strong></div>
+              {game.dealer.preferredPayment === 'LIGHTNING' && !dealerPaid && game.status !== 'CLOSED' && game.dealer.lightningAddress ? <ManualLightningPayoutCard
+                label={game.dealer.label ?? 'Dealer'}
+                destination={game.dealer.lightningAddress}
+                amount={settlement.dealerCompensation}
+                currency={game.currency}
+                lockedBtcFiatRate={game.lockedBtcFiatRate}
+                onConfirm={() => void execute(confirmDealerCompensation)}
+              /> : <button disabled={dealerPaid || game.status === 'CLOSED'} onClick={() => void execute(confirmDealerCompensation)}>{dealerPaid ? 'Confirmé ✓' : 'Confirmer rémunération espèces'}</button>}
+            </div>}
             {game.status === 'SETTLING' && <><div className={`closure ${closure.allowed ? 'ready' : ''}`}>{closure.allowed ? 'Tous les règlements sont confirmés.' : closure.reasons.join(' · ')}</div><button className="primary wide" disabled={!closure.allowed} onClick={() => void execute(closeGame)}>Clôturer la partie</button></>}
             {game.status === 'CLOSED' && <div className="success">Partie clôturée : aucun règlement restant.</div>}
           </section>}
@@ -646,9 +697,15 @@ export default function App() {
         {ledger.slice(-5).reverse().map((event) => <div className="ledger-event" key={event.id}><span>#{event.sequence} {event.type}</span><code>{event.hash.slice(0, 12)}…</code></div>)}
       </section>
 
-      <section className="card nwc-preview">
-        <div><h2>NWC</h2><p>{nwc.connected ? `Réception réelle active${nwc.connection?.alias ? ` sur ${nwc.connection.alias}` : ''}. Les caves/rebuys Lightning créent de vraies invoices et leur paiement est vérifié auprès du wallet. Les sorties restent manuelles.` : 'NWC déconnecté : les caves/rebuys Lightning utilisent uniquement le mock. Connecte un wallet receive-only dans le panneau ci-dessous pour activer la réception réelle.'}</p></div>
-        <span className={`state ${nwc.connected ? 'paid' : 'pending'}`}>{nwc.connected ? 'RECEIVE ONLY' : 'MOCK'}</span>
+      <section className={`card nwc-preview ${nwcMode === 'RECONNECT_REQUIRED' ? 'nwc-reconnect' : ''}`}>
+        <div><h2>NWC</h2><p>{nwcMode === 'LIVE_ARMED'
+          ? `Réception réelle armée${nwc.connection?.alias ? ` sur ${nwc.connection.alias}` : ''}. Les caves/rebuys créent de vraies invoices. Les sorties restent manuelles.`
+          : nwcMode === 'RECONNECT_REQUIRED'
+            ? 'Partie réelle active, wallet déconnecté : aucune nouvelle cave NWC ne sera créée tant que le wallet receive-only n’est pas reconnecté. Aucun fallback mock.'
+            : nwcMode === 'DIAGNOSTIC'
+              ? 'Wallet connecté en diagnostic seulement. Les caves de partie restent mock jusqu’à armement explicite.'
+              : 'Mode mock : aucune cave Lightning réelle. Connecte puis arme explicitement un wallet receive-only pour une partie réelle.'}</p></div>
+        <span className={`state ${nwcMode === 'LIVE_ARMED' ? 'paid' : 'pending'}`}>{nwcMode === 'LIVE_ARMED' ? 'RÉEL ARMÉ' : nwcMode === 'RECONNECT_REQUIRED' ? 'RECONNECTER' : nwcMode === 'DIAGNOSTIC' ? 'DIAGNOSTIC' : 'MOCK'}</span>
       </section>
 
       <section className="card donation">
