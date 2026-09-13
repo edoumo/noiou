@@ -25,6 +25,7 @@ import {
 import { appendLedgerEvent, verifyLedger } from './ledger';
 import LightningInvoiceCard from './LightningInvoiceCard';
 import { MockLightningAdapter, type LightningInvoice } from './lightning';
+import { MAX_LIVE_GAME_INVOICE_SATS, useNwcSession } from './NwcSessionContext';
 import {
   clearSession,
   loadSession,
@@ -55,6 +56,10 @@ function readStoredSession(): SessionSnapshot | null {
   }
 }
 
+function mockInvoicesOnly(invoices: Record<string, LightningInvoice>): LightningInvoice[] {
+  return Object.values(invoices).filter((invoice) => invoice.source !== 'NWC');
+}
+
 function workflowStep(game: Game | null): number {
   if (!game) return 1;
   if (game.status === 'OPEN') return 2;
@@ -63,10 +68,11 @@ function workflowStep(game: Game | null): number {
 }
 
 export default function App() {
+  const nwc = useNwcSession();
   const [initialSession] = useState<SessionSnapshot | null>(() => readStoredSession());
   const adapterRef = useRef<MockLightningAdapter | null>(null);
   const backupInputRef = useRef<HTMLInputElement | null>(null);
-  if (!adapterRef.current) adapterRef.current = new MockLightningAdapter(Object.values(initialSession?.mockInvoices ?? {}));
+  if (!adapterRef.current) adapterRef.current = new MockLightningAdapter(mockInvoicesOnly(initialSession?.mockInvoices ?? {}));
   const ledgerRef = useRef<LedgerEvent[]>(initialSession?.ledger ?? []);
 
   const [currency, setCurrency] = useState<Currency>(initialSession?.game?.currency ?? 'EUR');
@@ -123,7 +129,7 @@ export default function App() {
 
   function applySnapshot(restored: SessionSnapshot) {
     ledgerRef.current = restored.ledger;
-    adapterRef.current = new MockLightningAdapter(Object.values(restored.mockInvoices));
+    adapterRef.current = new MockLightningAdapter(mockInvoicesOnly(restored.mockInvoices));
     setGame(restored.game);
     setPlayers(restored.players);
     setContributions(restored.contributions);
@@ -235,6 +241,7 @@ export default function App() {
       chipValue: created.chipValue,
       lockedBtcFiatRate: created.lockedBtcFiatRate ?? null,
       dealer: created.dealer,
+      lightningReceiveMode: nwc.connected ? 'NWC_RECEIVE_ONLY' : 'MOCK',
     });
     if (startupDonationSats > 0) await recordDonation(created.id, startupDonationSats, 'Organisateur');
   }
@@ -291,25 +298,44 @@ export default function App() {
     const contribution = createContribution(game, player.id, kind, 'LIGHTNING');
     const sats = toSats(contribution.amount, game);
     if (sats <= 0) throw new Error('Le montant converti en sats est trop faible');
-    const invoice = await adapterRef.current!.createInvoice(sats, `NOIOU ${kind.toLowerCase()} ${player.nickname}`);
+    const memo = `NOIOU ${kind.toLowerCase()} ${player.nickname}`;
+    const invoice = nwc.connected
+      ? await nwc.createInvoice(sats, memo)
+      : await adapterRef.current!.createInvoice(sats, memo);
     const pending = markContributionPending([...contributions, contribution], contribution.id, invoice.id);
     setContributions(pending);
     setInvoices((current) => ({ ...current, [contribution.id]: invoice }));
-    await record(game.id, kind === 'BUYIN' ? 'BUYIN_CREATED' : 'REBUY_CREATED', { contributionId: contribution.id, playerId: player.id, method: 'LIGHTNING', amount: contribution.amount, sats });
-    await record(game.id, 'LIGHTNING_INVOICE_CREATED', { contributionId: contribution.id, invoiceId: invoice.id, sats });
+    await record(game.id, kind === 'BUYIN' ? 'BUYIN_CREATED' : 'REBUY_CREATED', { contributionId: contribution.id, playerId: player.id, method: 'LIGHTNING', amount: contribution.amount, sats, source: invoice.source ?? 'MOCK' });
+    await record(game.id, 'LIGHTNING_INVOICE_CREATED', { contributionId: contribution.id, invoiceId: invoice.id, sats, source: invoice.source ?? 'MOCK' });
   }
 
-  async function simulateInvoicePaid(contributionId: string) {
+  async function checkLightningContribution(contributionId: string) {
     if (!game) throw new Error('Aucune partie');
     await assertLedgerIntegrity();
     const contribution = contributions.find((item) => item.id === contributionId);
-    if (!contribution?.externalReference) throw new Error('Invoice introuvable');
-    adapterRef.current!.markInvoicePaid(contribution.externalReference);
-    const status = await adapterRef.current!.getInvoiceStatus(contribution.externalReference);
+    const invoice = invoices[contributionId];
+    if (!contribution?.externalReference || !invoice) throw new Error('Invoice introuvable');
+
+    let status: LightningInvoice['status'];
+    if (invoice.source === 'NWC') {
+      status = await nwc.getInvoiceStatus(invoice);
+    } else {
+      adapterRef.current!.markInvoicePaid(contribution.externalReference);
+      status = await adapterRef.current!.getInvoiceStatus(contribution.externalReference);
+    }
+
+    setInvoices((current) => ({ ...current, [contributionId]: { ...current[contributionId], status } }));
+    if (status === 'EXPIRED') throw new Error('Cette invoice Lightning a expiré');
     if (status !== 'PAID') throw new Error('Invoice non payée');
+
     setContributions((current) => confirmLightningContribution(current, contributionId, contribution.externalReference!));
-    setInvoices((current) => ({ ...current, [contributionId]: { ...current[contributionId], status: 'PAID' } }));
-    await record(game.id, 'CONTRIBUTION_PAID', { contributionId, playerId: contribution.playerId, method: 'LIGHTNING', invoiceId: contribution.externalReference });
+    await record(game.id, 'CONTRIBUTION_PAID', {
+      contributionId,
+      playerId: contribution.playerId,
+      method: 'LIGHTNING',
+      invoiceId: contribution.externalReference,
+      source: invoice.source ?? 'MOCK',
+    });
   }
 
   async function beginSettlement() {
@@ -352,12 +378,15 @@ export default function App() {
       if (!player.lightningAddress) throw new Error(`Destination Lightning manquante pour ${player.nickname}`);
       const sats = toSats(payout.amount, game);
       if (sats <= 0) throw new Error('Le paiement Lightning converti vaut 0 sat');
-      const prepared = await adapterRef.current!.preparePayment(player.lightningAddress, sats);
-      await adapterRef.current!.confirmPreparedPayment(prepared.id);
     }
 
     setPayouts((current) => confirmPayout(current, payout.playerId));
-    await record(game.id, 'PAYOUT_CONFIRMED', { playerId: payout.playerId, method: payout.method, amount: payout.amount, mock: payout.method === 'LIGHTNING' });
+    await record(game.id, 'PAYOUT_CONFIRMED', {
+      playerId: payout.playerId,
+      method: payout.method,
+      amount: payout.amount,
+      execution: payout.method === 'LIGHTNING' ? 'MANUAL_EXTERNAL_WALLET' : 'CASH_CONFIRMATION',
+    });
   }
 
   async function confirmDealerCompensation() {
@@ -369,11 +398,13 @@ export default function App() {
       if (!game.dealer.lightningAddress) throw new Error('Destination Lightning du dealer manquante');
       const sats = toSats(settlement.dealerCompensation, game);
       if (sats <= 0) throw new Error('La rémunération Lightning du dealer vaut 0 sat');
-      const prepared = await adapterRef.current!.preparePayment(game.dealer.lightningAddress, sats);
-      await adapterRef.current!.confirmPreparedPayment(prepared.id);
     }
     setDealerPaid(true);
-    await record(game.id, 'DEALER_COMPENSATION_CONFIRMED', { amount: settlement.dealerCompensation, method, mock: method === 'LIGHTNING' });
+    await record(game.id, 'DEALER_COMPENSATION_CONFIRMED', {
+      amount: settlement.dealerCompensation,
+      method,
+      execution: method === 'LIGHTNING' ? 'MANUAL_EXTERNAL_WALLET' : 'CASH_CONFIRMATION',
+    });
   }
 
   async function closeGame() {
@@ -445,12 +476,13 @@ export default function App() {
   const closure = checkGameClosure(settlement, payouts, dealerPaid);
   const totalDonations = projectDonations.reduce((sum, donation) => sum + donation.sats, 0);
   const step = workflowStep(game);
+  const lightningButtonLabel = nwc.connected ? 'Lightning réel' : 'Lightning mock';
 
   return (
     <main className="shell">
       <header>
         <div>
-          <p className="eyebrow">Private table-test prototype</p>
+          <p className="eyebrow">Private alpha · physical table</p>
           <h1>NOIOU</h1>
           <p className="tagline">La partie reste physique. NOIOU s’occupe seulement de la caisse et du règlement.</p>
         </div>
@@ -461,7 +493,8 @@ export default function App() {
         {['Configurer', 'Encaisser', 'Compter', 'Régler'].map((label, index) => <span key={label} className={step === index + 1 ? 'active' : step > index + 1 ? 'done' : ''}><b>{index + 1}</b>{label}</span>)}
       </nav>
 
-      {sessionRestored && <div className="session-note"><span>Session locale restaurée · aucun secret wallet n’est stocké.</span><button onClick={() => setSessionRestored(false)}>OK</button></div>}
+      {sessionRestored && <div className="session-note"><span>Session locale restaurée · aucun secret wallet n’est stocké. Une invoice NWC en attente nécessite de reconnecter le wallet pour vérifier son paiement.</span><button onClick={() => setSessionRestored(false)}>OK</button></div>}
+      {nwc.connected && <div className="session-note"><span>⚡ Réception NWC réelle activée{nwc.connection?.alias ? ` · ${nwc.connection.alias}` : ''}. Les caves/rebuys Lightning créditent directement le wallet de l’organisateur. Les payouts restent manuels hors NOIOU.</span></div>}
       {game && <div className="save-note">Sauvegarde locale automatique {lastSavedAt ? `· ${new Date(lastSavedAt).toLocaleTimeString('fr-FR')}` : ''}</div>}
       {backupStatus && <div className="session-note"><span>{backupStatus}</span><button onClick={() => setBackupStatus('')}>OK</button></div>}
       {error && <div className="alert" role="alert">{error}</div>}
@@ -481,7 +514,7 @@ export default function App() {
 
       {!game && (
         <section className="card">
-          <div className="section-title"><h2>Créer la partie</h2><span>aucun fonds réel</span></div>
+          <div className="section-title"><h2>Créer la partie</h2><span>{nwc.connected ? 'Lightning réel en réception seule' : 'Lightning mock tant que NWC est déconnecté'}</span></div>
           <div className="grid">
             <label>Devise
               <select value={currency} onChange={(event) => setCurrency(event.target.value as Currency)}>
@@ -517,6 +550,7 @@ export default function App() {
               {dealerPayment === 'LIGHTNING' && <label>Lightning Address dealer<input value={dealerLightningAddress} onChange={(event) => setDealerLightningAddress(event.target.value)} placeholder="dealer@wallet.example" /></label>}
             </>}
           </div>
+          {nwc.connected && <p className="muted">Sécurité alpha : chaque invoice de cave/rebuy NWC est plafonnée à {MAX_LIVE_GAME_INVOICE_SATS.toLocaleString('fr-FR')} sats. Le taux BTC/fiat affiché est celui verrouillé pour la partie.</p>}
           <div className="donation-options">
             <strong>❤️ Soutenir NOIOU au lancement (mock, hors cagnotte)</strong>
             <div className="actions">{[0, 500, 1000, 5000].map((sats) => <button className={startupDonationSats === sats ? 'selected' : ''} key={sats} onClick={() => setStartupDonationSats(sats)}>{sats === 0 ? 'Pas maintenant' : `${sats.toLocaleString('fr-FR')} sats`}</button>)}</div>
@@ -551,7 +585,7 @@ export default function App() {
           </section>
 
           <section className="card">
-            <div className="section-title"><h2>Caves et rebuys</h2><span>jetons seulement après encaissement</span></div>
+            <div className="section-title"><h2>Caves et rebuys</h2><span>jetons seulement après encaissement confirmé</span></div>
             {players.length === 0 && <p className="muted">Ajoute les joueurs pour commencer.</p>}
             {players.map((player) => {
               const playerContributions = contributions.filter((contribution) => contribution.playerId === player.id);
@@ -559,17 +593,17 @@ export default function App() {
               return (
                 <div className="player-box" key={player.id}>
                   <div className="player-heading"><div><strong>{player.nickname}</strong><small>{player.preferredPayment}</small></div><span>{playerContributions.filter((item) => item.status === 'PAID').length} encaissé(s)</span></div>
-                  {!buyInPaid && !hasOpenBuyIn(player.id) && <div className="actions"><button onClick={() => void execute(() => addCashContribution(player, 'BUYIN'))}>Cave espèces reçues</button><button onClick={() => void execute(() => addLightningContribution(player, 'BUYIN'))}>Cave Lightning mock</button></div>}
+                  {!buyInPaid && !hasOpenBuyIn(player.id) && <div className="actions"><button onClick={() => void execute(() => addCashContribution(player, 'BUYIN'))}>Cave espèces reçues</button><button onClick={() => void execute(() => addLightningContribution(player, 'BUYIN'))}>Cave {lightningButtonLabel}</button></div>}
                   {playerContributions.map((contribution) => {
                     const invoice = invoices[contribution.id];
                     return <div className="contribution" key={contribution.id}>
-                      <span>{contribution.kind} · {contribution.method}</span>
+                      <span>{contribution.kind} · {contribution.method}{invoice?.source === 'NWC' ? ' · NWC réel' : invoice ? ' · mock' : ''}</span>
                       <strong>{formatAmount(contribution.amount, game.currency)}</strong>
                       <em className={`state ${contribution.status.toLowerCase()}`}>{contribution.status}</em>
-                      {invoice && contribution.status === 'PENDING' && <LightningInvoiceCard invoice={invoice} onSimulatePaid={() => void execute(() => simulateInvoicePaid(contribution.id))} />}
+                      {invoice && contribution.status === 'PENDING' && <LightningInvoiceCard invoice={invoice} onSimulatePaid={() => void execute(() => checkLightningContribution(contribution.id))} />}
                     </div>;
                   })}
-                  {buyInPaid && <div className="actions"><button onClick={() => void execute(() => addCashContribution(player, 'REBUY'))}>+ Rebuy espèces</button><button onClick={() => void execute(() => addLightningContribution(player, 'REBUY'))}>+ Rebuy Lightning mock</button></div>}
+                  {buyInPaid && <div className="actions"><button onClick={() => void execute(() => addCashContribution(player, 'REBUY'))}>+ Rebuy espèces</button><button onClick={() => void execute(() => addLightningContribution(player, 'REBUY'))}>+ Rebuy {lightningButtonLabel}</button></div>}
                 </div>
               );
             })}
@@ -594,12 +628,12 @@ export default function App() {
           </section>}
 
           {settlement?.balanced && <section className="card">
-            <div className="section-title"><h2>Règlements</h2><span>Lightning = mock en V1 privée</span></div>
+            <div className="section-title"><h2>Règlements</h2><span>Sorties Lightning = paiement manuel dans le wallet de l’organisateur</span></div>
             <div className="payouts">{payouts.filter((payout) => payout.amount > 0).map((payout) => {
               const player = players.find((candidate) => candidate.id === payout.playerId)!;
-              return <div className="payout" key={payout.playerId}><span>{player.nickname}</span><strong>{formatAmount(payout.amount, game.currency)}</strong><small>{payout.method} · {payout.status}</small>{game.status !== 'CLOSED' && payout.status !== 'CONFIRMED' && <button onClick={() => void execute(() => confirmPlayerPayout(payout))}>{payout.method === 'LIGHTNING' ? 'Confirmer paiement mock' : 'Confirmer remise espèces'}</button>}</div>;
+              return <div className="payout" key={payout.playerId}><span>{player.nickname}</span><strong>{formatAmount(payout.amount, game.currency)}</strong><small>{payout.method} · {payout.status}</small>{game.status !== 'CLOSED' && payout.status !== 'CONFIRMED' && <button onClick={() => void execute(() => confirmPlayerPayout(payout))}>{payout.method === 'LIGHTNING' ? 'Confirmer paiement effectué dans le wallet' : 'Confirmer remise espèces'}</button>}</div>;
             })}</div>
-            {settlement.dealerCompensation > 0 && <div className="dealer-line"><span>{game.dealer.label ?? 'Dealer'} · {game.dealer.preferredPayment ?? 'CASH'}</span><strong>{formatAmount(settlement.dealerCompensation, game.currency)}</strong><button disabled={dealerPaid || game.status === 'CLOSED'} onClick={() => void execute(confirmDealerCompensation)}>{dealerPaid ? 'Confirmé ✓' : (game.dealer.preferredPayment === 'LIGHTNING' ? 'Confirmer paiement mock' : 'Confirmer rémunération')}</button></div>}
+            {settlement.dealerCompensation > 0 && <div className="dealer-line"><span>{game.dealer.label ?? 'Dealer'} · {game.dealer.preferredPayment ?? 'CASH'}</span><strong>{formatAmount(settlement.dealerCompensation, game.currency)}</strong><button disabled={dealerPaid || game.status === 'CLOSED'} onClick={() => void execute(confirmDealerCompensation)}>{dealerPaid ? 'Confirmé ✓' : (game.dealer.preferredPayment === 'LIGHTNING' ? 'Confirmer paiement effectué dans le wallet' : 'Confirmer rémunération')}</button></div>}
             {game.status === 'SETTLING' && <><div className={`closure ${closure.allowed ? 'ready' : ''}`}>{closure.allowed ? 'Tous les règlements sont confirmés.' : closure.reasons.join(' · ')}</div><button className="primary wide" disabled={!closure.allowed} onClick={() => void execute(closeGame)}>Clôturer la partie</button></>}
             {game.status === 'CLOSED' && <div className="success">Partie clôturée : aucun règlement restant.</div>}
           </section>}
@@ -613,12 +647,12 @@ export default function App() {
       </section>
 
       <section className="card nwc-preview">
-        <div><h2>NWC</h2><p>Préparation sécurité uniquement : création/lecture d’invoices prévue, paiements sortants live désactivés. Les secrets NWC ne seront ni journalisés ni sauvegardés dans les backups.</p></div>
-        <span className="state pending">LIVE OFF</span>
+        <div><h2>NWC</h2><p>{nwc.connected ? `Réception réelle active${nwc.connection?.alias ? ` sur ${nwc.connection.alias}` : ''}. Les caves/rebuys Lightning créent de vraies invoices et leur paiement est vérifié auprès du wallet. Les sorties restent manuelles.` : 'NWC déconnecté : les caves/rebuys Lightning utilisent uniquement le mock. Connecte un wallet receive-only dans le panneau ci-dessous pour activer la réception réelle.'}</p></div>
+        <span className={`state ${nwc.connected ? 'paid' : 'pending'}`}>{nwc.connected ? 'RECEIVE ONLY' : 'MOCK'}</span>
       </section>
 
       <section className="card donation">
-        <div><h2>Soutenir NOIOU</h2><p>Dons volontaires, en sats, toujours hors cagnotte. Prototype : aucune transaction réelle.</p><small>{projectDonations.length} don(s) mock · {totalDonations.toLocaleString('fr-FR')} sats au total</small></div>
+        <div><h2>Soutenir NOIOU</h2><p>Dons volontaires, en sats, toujours hors cagnotte. Prototype : aucune transaction réelle pour les dons.</p><small>{projectDonations.length} don(s) mock · {totalDonations.toLocaleString('fr-FR')} sats au total</small></div>
         {game?.status === 'CLOSED' ? <div className="donation-form"><label>Donateur (pseudo facultatif)<input value={donorLabel} onChange={(event) => setDonorLabel(event.target.value)} placeholder="Alice" /></label><label>Sats<input type="number" min="1" step="1" value={donationSats} onChange={(event) => setDonationSats(Number(event.target.value))} /></label><div className="actions">{[500, 1000, 5000].map((sats) => <button key={sats} onClick={() => setDonationSats(sats)}>{sats.toLocaleString('fr-FR')}</button>)}</div><button onClick={() => void execute(addEndDonation)}>⚡ Simuler le don</button></div> : <span className="muted">Un autre don pourra être proposé après clôture.</span>}
       </section>
 

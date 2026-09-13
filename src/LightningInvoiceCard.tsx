@@ -7,7 +7,8 @@ interface Props {
 }
 
 export default function LightningInvoiceCard({ invoice, onSimulatePaid }: Props) {
-  const isNwc = invoice.source === 'NWC';
+  const realNwc = invoice.source === 'NWC';
+
   return (
     <div className="invoice-card">
       <div className="invoice-qr" aria-label="QR code Lightning">
@@ -15,9 +16,9 @@ export default function LightningInvoiceCard({ invoice, onSimulatePaid }: Props)
       </div>
       <div className="invoice-copy">
         <strong>{invoice.sats.toLocaleString('fr-FR')} sats</strong>
-        <small>{invoice.status === 'PAID' ? 'Paiement reçu ✓' : isNwc ? 'Invoice NWC réelle · scanne avec un autre wallet' : 'Scanne ce QR avec le wallet Lightning'}</small>
+        <small>{invoice.status === 'PAID' ? 'Paiement reçu ✓' : realNwc ? 'Invoice réelle · scanne ce QR avec le wallet Lightning' : 'Invoice mock · QR de test uniquement'}</small>
         <code>{invoice.request}</code>
-        {onSimulatePaid && invoice.status === 'PENDING' && <button onClick={onSimulatePaid}>{isNwc ? 'Vérifier le paiement' : 'Simuler paiement Lightning'}</button>}
+        {onSimulatePaid && invoice.status === 'PENDING' && <button onClick={onSimulatePaid}>{realNwc ? 'Vérifier le paiement' : 'Simuler paiement Lightning'}</button>}
       </div>
     </div>
   );
