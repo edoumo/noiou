@@ -1,0 +1,87 @@
+.manual-receipt-card {
+  margin-top: 0.8rem;
+  padding: 1rem;
+  border: 1px solid var(--line, #d9d9d9);
+  border-radius: 14px;
+  background: var(--panel, rgba(127, 127, 127, 0.06));
+}
+
+.manual-receipt-head,
+.manual-request-grid,
+.manual-bolt11-actions {
+  display: flex;
+  gap: 0.8rem;
+  align-items: center;
+  flex-wrap: wrap;
+}
+
+.manual-receipt-head {
+  justify-content: space-between;
+  margin-bottom: 0.8rem;
+}
+
+.manual-receipt-head > div,
+.manual-request-copy,
+.manual-bolt11-entry {
+  display: grid;
+  gap: 0.35rem;
+}
+
+.manual-badge {
+  font-size: 0.8rem;
+  font-weight: 700;
+  padding: 0.3rem 0.55rem;
+  border-radius: 999px;
+  border: 1px solid currentColor;
+}
+
+.manual-request-grid {
+  align-items: flex-start;
+}
+
+.manual-request-copy {
+  flex: 1 1 260px;
+  min-width: 0;
+}
+
+.manual-request-copy code {
+  overflow-wrap: anywhere;
+  word-break: break-word;
+}
+
+.manual-bolt11-entry {
+  margin-top: 0.9rem;
+}
+
+.manual-bolt11-actions input {
+  flex: 1 1 260px;
+  min-width: 0;
+}
+
+.manual-confirm-check {
+  display: flex;
+  align-items: flex-start;
+  gap: 0.55rem;
+  margin: 1rem 0 0.7rem;
+}
+
+.manual-confirm-check input {
+  margin-top: 0.2rem;
+}
+
+@media (max-width: 560px) {
+  .manual-request-grid {
+    display: grid;
+    justify-items: center;
+  }
+
+  .manual-request-copy {
+    width: 100%;
+  }
+
+  .manual-bolt11-actions {
+    display: grid;
+    grid-template-columns: 1fr;
+    width: 100%;
+  }
+}

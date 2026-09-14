@@ -95,6 +95,19 @@ describe('live NWC mode recovery', () => {
     expect(sessionRequiresNwcReceipts(snapshot)).toBe(true);
   });
 
+  it('does not treat manual external-wallet receipts as NWC', () => {
+    const snapshot = openGameSnapshot();
+    snapshot.game!.lightningReceiveMode = 'EXTERNAL_WALLET_MANUAL';
+    snapshot.mockInvoices['contribution-1'] = {
+      id: 'manual-lightning:1',
+      request: 'lno1qcp4256ypq',
+      sats: 1000,
+      status: 'PENDING',
+      source: 'MANUAL_EXTERNAL',
+    };
+    expect(sessionRequiresNwcReceipts(snapshot)).toBe(false);
+  });
+
   it('does not keep the lock after the game is closed', () => {
     const snapshot = openGameSnapshot();
     snapshot.game!.status = 'CLOSED';

@@ -5,7 +5,7 @@ export type DealerMode = 'NONE' | 'FIXED' | 'PERCENT' | 'END_OF_GAME';
 export type ContributionKind = 'BUYIN' | 'REBUY';
 export type ContributionStatus = 'CREATED' | 'PENDING' | 'PAID' | 'CANCELLED';
 export type PayoutStatus = 'PENDING' | 'CONFIRMED';
-export type LightningReceiveMode = 'MOCK' | 'NWC_RECEIVE_ONLY';
+export type LightningReceiveMode = 'MOCK' | 'NWC_RECEIVE_ONLY' | 'EXTERNAL_WALLET_MANUAL';
 
 export type LedgerEventType =
   | 'GAME_CREATED'
@@ -13,6 +13,8 @@ export type LedgerEventType =
   | 'BUYIN_CREATED'
   | 'REBUY_CREATED'
   | 'LIGHTNING_INVOICE_CREATED'
+  | 'LIGHTNING_MANUAL_REQUEST_CREATED'
+  | 'LIGHTNING_MANUAL_RECEIPT_CONFIRMED'
   | 'CASH_CONFIRMED'
   | 'CONTRIBUTION_PAID'
   | 'SETTLEMENT_STARTED'
@@ -56,6 +58,7 @@ export interface Game {
   status: GameStatus;
   dealer: DealerRule;
   lightningReceiveMode?: LightningReceiveMode;
+  organizerLightningDestination?: string;
   lockedBtcFiatRate?: number;
   createdAt: string;
 }
@@ -83,6 +86,8 @@ export interface Payout {
   amount: number;
   method: PaymentMethod | 'ANY';
   status: PayoutStatus;
+  /** One-time BOLT11 or reusable destination selected for this payout. */
+  lightningRequest?: string;
 }
 
 export interface DealerTip {
