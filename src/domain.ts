@@ -86,6 +86,8 @@ export interface Payout {
   amount: number;
   method: PaymentMethod | 'ANY';
   status: PayoutStatus;
+  /** One-time BOLT11 or reusable destination selected for this payout. */
+  lightningRequest?: string;
 }
 
 export interface DealerTip {
