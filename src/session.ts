@@ -1,4 +1,4 @@
-import type { Contribution, Game, LedgerEvent, Payout, Player, ProjectDonation, SettlementResult } from './domain';
+import type { Contribution, DealerTip, Game, LedgerEvent, Payout, Player, ProjectDonation, SettlementResult } from './domain';
 import type { LightningInvoice } from './lightning';
 
 export const SESSION_STORAGE_KEY = 'noiou.session.v1';
@@ -19,6 +19,8 @@ export interface SessionSnapshot {
   dealerPaid: boolean;
   ledger: LedgerEvent[];
   projectDonations: ProjectDonation[];
+  /** Added during schema v1 incubation; optional keeps old local sessions/backups readable byte-for-byte. */
+  dealerTips?: DealerTip[];
 }
 
 export function createEmptySession(savedAt = new Date().toISOString()): SessionSnapshot {
@@ -36,6 +38,7 @@ export function createEmptySession(savedAt = new Date().toISOString()): SessionS
     dealerPaid: false,
     ledger: [],
     projectDonations: [],
+    dealerTips: [],
   };
 }
 
@@ -51,6 +54,7 @@ export function parseSession(raw: string): SessionSnapshot {
   if (!Array.isArray(candidate.players) || !Array.isArray(candidate.contributions) || !Array.isArray(candidate.payouts) || !Array.isArray(candidate.ledger) || !Array.isArray(candidate.projectDonations)) {
     throw new Error('Invalid session collections');
   }
+  if (candidate.dealerTips !== undefined && !Array.isArray(candidate.dealerTips)) throw new Error('Invalid dealer tips');
   if (!candidate.stacks || typeof candidate.stacks !== 'object' || !candidate.mockInvoices || typeof candidate.mockInvoices !== 'object') throw new Error('Invalid session maps');
   if (typeof candidate.stacksLocked !== 'boolean' || typeof candidate.dealerPaid !== 'boolean' || typeof candidate.savedAt !== 'string') {
     throw new Error('Invalid session state');
