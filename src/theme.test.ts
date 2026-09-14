@@ -3,8 +3,8 @@ import { loadThemePreference, resolveTheme, saveThemePreference, THEME_STORAGE_K
 
 class MemoryStorage {
   private values = new Map<string, string>();
-  getItem(key: string) { return this.values.get(key) ?? null; }
-  setItem(key: string, value: string) { this.values.set(key, value); }
+  getItem(key: string): string | null { return this.values.get(key) ?? null; }
+  setItem(key: string, value: string): void { this.values.set(key, value); }
 }
 
 describe('theme preference', () => {
@@ -20,11 +20,11 @@ describe('theme preference', () => {
 
   it('persists only supported preferences and defaults to AUTO', () => {
     const storage = new MemoryStorage();
-    expect(loadThemePreference(storage as Storage)).toBe('AUTO');
-    saveThemePreference(storage as Storage, 'DARK');
+    expect(loadThemePreference(storage)).toBe('AUTO');
+    saveThemePreference(storage, 'DARK');
     expect(storage.getItem(THEME_STORAGE_KEY)).toBe('DARK');
-    expect(loadThemePreference(storage as Storage)).toBe('DARK');
+    expect(loadThemePreference(storage)).toBe('DARK');
     storage.setItem(THEME_STORAGE_KEY, 'BROKEN');
-    expect(loadThemePreference(storage as Storage)).toBe('AUTO');
+    expect(loadThemePreference(storage)).toBe('AUTO');
   });
 });
