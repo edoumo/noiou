@@ -7,9 +7,16 @@ describe('Lightning destinations', () => {
     expect(normalizeReusableLightningDestination('alice@example.com')).toBe('alice@example.com');
   });
 
-  it('accepts a BOLT12 offer as a reusable Phoenix-style destination', () => {
+  it('accepts a BOLT12 offer as a reusable destination', () => {
     const offer = 'lno1qcp4256ypq';
     expect(parseLightningDestination(offer)).toMatchObject({ kind: 'BOLT12_OFFER', reusable: true, value: offer });
+  });
+
+  it('never confuses BOLT11 prefixes with BOLT12 offers', () => {
+    expect(parseLightningDestination('lnbc10u1pexample')).toMatchObject({ kind: 'BOLT11_INVOICE', reusable: false });
+    expect(parseLightningDestination('lntb10u1pexample')).toMatchObject({ kind: 'BOLT11_INVOICE', reusable: false });
+    expect(parseLightningDestination('lnbcrt10u1pexample')).toMatchObject({ kind: 'BOLT11_INVOICE', reusable: false });
+    expect(parseLightningDestination('lno1qcp4256ypq')).toMatchObject({ kind: 'BOLT12_OFFER', reusable: true });
   });
 
   it('unwraps lightning: QR payloads', () => {
