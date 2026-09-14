@@ -1,8 +1,9 @@
-import { useMemo, useState } from 'react';
+import { useMemo, useRef, useState } from 'react';
 import type { Currency } from './domain';
 import { parseExactBolt11Invoice } from './manualExternalLightning';
 import { buildManualLightningPayout } from './manualPayout';
 import QrCameraScanner from './QrCameraScanner';
+import { decodeQrImageFile } from './qrImageImport';
 
 interface Props {
   label: string;
@@ -51,6 +52,7 @@ export default function ManualLightningPayoutCard({
   const [bolt11, setBolt11] = useState('');
   const [scanOpen, setScanOpen] = useState(false);
   const [invoiceError, setInvoiceError] = useState('');
+  const imageInputRef = useRef<HTMLInputElement | null>(null);
   const sats = expectedSats(amount, currency, lockedBtcFiatRate);
 
   const instruction = useMemo(() => destination ? buildManualLightningPayout({
@@ -83,7 +85,23 @@ export default function ManualLightningPayoutCard({
     }
   }
 
+  async function importImage(file: File) {
+    try { useBolt11(await decodeQrImageFile(file)); }
+    catch (error) { setInvoiceError(error instanceof Error ? error.message : String(error)); }
+  }
+
+  async function pasteInvoice() {
+    try {
+      const text = await navigator.clipboard.readText();
+      if (!text.trim()) throw new Error('Le presse-papiers est vide.');
+      setBolt11(text.trim());
+    } catch (error) {
+      setInvoiceError(error instanceof Error ? error.message : 'Impossible de lire le presse-papiers.');
+    }
+  }
+
   const cameraAvailable = typeof navigator !== 'undefined' && Boolean(navigator.mediaDevices?.getUserMedia);
+  const clipboardAvailable = typeof navigator !== 'undefined' && Boolean(navigator.clipboard?.readText);
 
   return (
     <div className="manual-payout">
@@ -109,7 +127,7 @@ export default function ManualLightningPayoutCard({
           <button type="button" disabled={disabled} onClick={() => void copy(instruction.destination, 'Destination copiée.')}>Copier la destination</button>
           <button type="button" disabled={disabled} onClick={() => void copy(instruction.summary, 'Instruction complète copiée.')}>Copier l’instruction</button>
         </div>
-      </> : <p className="muted">Aucune destination réutilisable enregistrée. Le bénéficiaire peut générer dans n’importe quel wallet Lightning une invoice BOLT11 de {sats.toLocaleString('fr-FR')} sats et te la faire scanner.</p>}
+      </> : <p className="muted">Aucune destination réutilisable enregistrée. Le bénéficiaire peut générer dans n’importe quel wallet Lightning une invoice BOLT11 de {sats.toLocaleString('fr-FR')} sats et te la faire scanner, importer depuis Photos ou coller.</p>}
 
       {onUseBolt11 && <div className="manual-bolt11-entry">
         <strong>Invoice BOLT11 ponctuelle du bénéficiaire</strong>
@@ -117,7 +135,14 @@ export default function ManualLightningPayoutCard({
         <div className="manual-bolt11-actions">
           <input value={bolt11} onChange={(event) => setBolt11(event.target.value)} placeholder="lnbc…" autoCapitalize="none" autoCorrect="off" spellCheck={false} />
           <button type="button" disabled={!cameraAvailable || disabled} onClick={() => setScanOpen(true)}>📷 Scanner</button>
+          <button type="button" disabled={disabled} onClick={() => imageInputRef.current?.click()}>🖼️ Photos</button>
+          <button type="button" disabled={!clipboardAvailable || disabled} onClick={() => void pasteInvoice()}>📋 Coller</button>
           <button type="button" disabled={!bolt11.trim() || disabled} onClick={() => useBolt11(bolt11)}>Utiliser cette invoice</button>
+          <input ref={imageInputRef} hidden type="file" accept="image/*" onChange={(event) => {
+            const file = event.target.files?.[0];
+            event.currentTarget.value = '';
+            if (file) void importImage(file);
+          }} />
         </div>
         {invoiceError && <div className="alert" role="alert">{invoiceError}</div>}
       </div>}

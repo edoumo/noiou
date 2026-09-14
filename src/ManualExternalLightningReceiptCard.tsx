@@ -1,8 +1,9 @@
-import { useMemo, useState } from 'react';
+import { useMemo, useRef, useState } from 'react';
 import { QRCodeSVG } from 'qrcode.react';
 import type { LightningInvoice } from './lightning';
 import { parseLightningDestination } from './lightningDestination';
 import QrCameraScanner from './QrCameraScanner';
+import { decodeQrImageFile } from './qrImageImport';
 import './manualExternalLightning.css';
 
 interface Props {
@@ -17,9 +18,11 @@ export default function ManualExternalLightningReceiptCard({ request, onUseBolt1
   const [acknowledged, setAcknowledged] = useState(false);
   const [busy, setBusy] = useState(false);
   const [localError, setLocalError] = useState('');
+  const imageInputRef = useRef<HTMLInputElement | null>(null);
   const parsed = useMemo(() => parseLightningDestination(request.request), [request.request]);
   const isBolt11 = parsed.kind === 'BOLT11_INVOICE';
   const cameraAvailable = typeof navigator !== 'undefined' && Boolean(navigator.mediaDevices?.getUserMedia);
+  const clipboardAvailable = typeof navigator !== 'undefined' && Boolean(navigator.clipboard?.readText);
 
   async function applyBolt11(raw: string) {
     try {
@@ -33,6 +36,21 @@ export default function ManualExternalLightningReceiptCard({ request, onUseBolt1
       setLocalError(error instanceof Error ? error.message : String(error));
     } finally {
       setBusy(false);
+    }
+  }
+
+  async function importImage(file: File) {
+    try { await applyBolt11(await decodeQrImageFile(file)); }
+    catch (error) { setLocalError(error instanceof Error ? error.message : String(error)); }
+  }
+
+  async function pasteInvoice() {
+    try {
+      const text = await navigator.clipboard.readText();
+      if (!text.trim()) throw new Error('Le presse-papiers est vide.');
+      setBolt11(text.trim());
+    } catch (error) {
+      setLocalError(error instanceof Error ? error.message : 'Impossible de lire le presse-papiers.');
     }
   }
 
@@ -69,7 +87,7 @@ export default function ManualExternalLightningReceiptCard({ request, onUseBolt1
             : 'Destination réutilisable. Le payeur doit envoyer exactement le montant affiché. Si le wallet ne le permet pas, génère une invoice BOLT11 ci-dessous.'}</small>
           <code>{request.request}</code>
         </div>
-      </div> : <p className="muted">Aucune destination réutilisable n’a été enregistrée pour l’organisateur. Génère une invoice du montant exact dans ton wallet Lightning, puis scanne-la ici.</p>}
+      </div> : <p className="muted">Aucune destination réutilisable n’a été enregistrée pour l’organisateur. Génère une invoice du montant exact dans ton wallet Lightning, puis scanne-la, importe sa capture ou colle-la ici.</p>}
 
       <div className="manual-bolt11-entry">
         <strong>{request.request && !isBolt11 ? 'Option universelle : invoice BOLT11 ponctuelle' : 'Invoice BOLT11 du wallet organisateur'}</strong>
@@ -84,9 +102,16 @@ export default function ManualExternalLightningReceiptCard({ request, onUseBolt1
             spellCheck={false}
           />
           <button type="button" disabled={!cameraAvailable || busy} onClick={() => setScanning(true)}>📷 Scanner</button>
+          <button type="button" disabled={busy} onClick={() => imageInputRef.current?.click()}>🖼️ Photos</button>
+          <button type="button" disabled={!clipboardAvailable || busy} onClick={() => void pasteInvoice()}>📋 Coller</button>
           <button type="button" disabled={!bolt11.trim() || busy} onClick={() => void applyBolt11(bolt11)}>Valider l’invoice</button>
+          <input ref={imageInputRef} hidden type="file" accept="image/*" onChange={(event) => {
+            const file = event.target.files?.[0];
+            event.currentTarget.value = '';
+            if (file) void importImage(file);
+          }} />
         </div>
-        {!cameraAvailable && <small>Caméra indisponible : colle l’invoice BOLT11 manuellement.</small>}
+        {!cameraAvailable && <small>Caméra indisponible : utilise Photos, le presse-papiers ou colle l’invoice manuellement.</small>}
       </div>
 
       {localError && <div className="alert" role="alert">{localError}</div>}
