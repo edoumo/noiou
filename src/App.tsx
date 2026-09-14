@@ -1,9 +1,13 @@
 import { useEffect, useRef, useState } from 'react';
 import { backupFilename, createSessionBackup, parseSessionBackup } from './backup';
+import ConfirmDialog from './ConfirmDialog';
+import { createDealerTip } from './dealerTips';
 import type {
   Contribution,
   ContributionKind,
   Currency,
+  DealerMode,
+  DealerTip,
   FinalStack,
   Game,
   LedgerEvent,
@@ -35,6 +39,13 @@ import {
   type SessionSnapshot,
 } from './session';
 import { calculateSettlement } from './settlement';
+import {
+  applyResolvedTheme,
+  loadThemePreference,
+  resolveTheme,
+  saveThemePreference,
+  type ThemePreference,
+} from './theme';
 import './styles.css';
 
 function formatAmount(amount: number, currency: Currency): string {
@@ -57,6 +68,16 @@ function readStoredSession(): SessionSnapshot | null {
   }
 }
 
+function readThemePreference(): ThemePreference {
+  if (typeof window === 'undefined') return 'AUTO';
+  return loadThemePreference(window.localStorage);
+}
+
+function normalizeDealerMode(mode: DealerMode | undefined): 'NONE' | 'FIXED' | 'PERCENT' {
+  if (mode === 'FIXED' || mode === 'PERCENT' || mode === 'NONE') return mode;
+  return 'NONE';
+}
+
 function mockInvoicesOnly(invoices: Record<string, LightningInvoice>): LightningInvoice[] {
   return Object.values(invoices).filter((invoice) => invoice.source !== 'NWC');
 }
@@ -76,12 +97,13 @@ export default function App() {
   if (!adapterRef.current) adapterRef.current = new MockLightningAdapter(mockInvoicesOnly(initialSession?.mockInvoices ?? {}));
   const ledgerRef = useRef<LedgerEvent[]>(initialSession?.ledger ?? []);
 
+  const [themePreference, setThemePreference] = useState<ThemePreference>(() => readThemePreference());
   const [currency, setCurrency] = useState<Currency>(initialSession?.game?.currency ?? 'EUR');
   const [buyIn, setBuyIn] = useState(initialSession?.game?.buyInAmount ?? 20);
   const [chipValue, setChipValue] = useState(initialSession?.game?.chipValue ?? 1);
   const [btcFiatRate, setBtcFiatRate] = useState(initialSession?.game?.lockedBtcFiatRate ?? 100_000);
   const [dealerEnabled, setDealerEnabled] = useState(initialSession?.game?.dealer.enabled ?? false);
-  const [dealerMode, setDealerMode] = useState<'FIXED' | 'PERCENT'>(initialSession?.game?.dealer.mode === 'FIXED' ? 'FIXED' : 'PERCENT');
+  const [dealerMode, setDealerMode] = useState<'NONE' | 'FIXED' | 'PERCENT'>(() => normalizeDealerMode(initialSession?.game?.dealer.mode));
   const [dealerValue, setDealerValue] = useState(initialSession?.game?.dealer.value ?? 10);
   const [dealerLabel, setDealerLabel] = useState(initialSession?.game?.dealer.label ?? 'Dealer');
   const [dealerPayment, setDealerPayment] = useState<PaymentMethod>(initialSession?.game?.dealer.preferredPayment === 'LIGHTNING' ? 'LIGHTNING' : 'CASH');
@@ -100,6 +122,10 @@ export default function App() {
   const [settlement, setSettlement] = useState<SettlementResult | null>(initialSession?.settlement ?? null);
   const [payouts, setPayouts] = useState<Payout[]>(initialSession?.payouts ?? []);
   const [dealerPaid, setDealerPaid] = useState(initialSession?.dealerPaid ?? false);
+  const [dealerTips, setDealerTips] = useState<DealerTip[]>(initialSession?.dealerTips ?? []);
+  const [dealerTipAmounts, setDealerTipAmounts] = useState<Record<string, number>>({});
+  const [dealerTipMethods, setDealerTipMethods] = useState<Record<string, PaymentMethod>>({});
+  const [cashRebuyConfirmation, setCashRebuyConfirmation] = useState<Player | null>(null);
   const [projectDonations, setProjectDonations] = useState<ProjectDonation[]>(initialSession?.projectDonations ?? []);
   const [donationSats, setDonationSats] = useState(1000);
   const [donorLabel, setDonorLabel] = useState('');
@@ -125,6 +151,7 @@ export default function App() {
       dealerPaid,
       ledger,
       projectDonations,
+      dealerTips,
     };
   }
 
@@ -140,6 +167,7 @@ export default function App() {
     setSettlement(restored.settlement);
     setPayouts(restored.payouts);
     setDealerPaid(restored.dealerPaid);
+    setDealerTips(restored.dealerTips ?? []);
     setLedger(restored.ledger);
     setProjectDonations(restored.projectDonations);
     setLastSavedAt(restored.savedAt);
@@ -151,13 +179,24 @@ export default function App() {
       setChipValue(restored.game.chipValue);
       setBtcFiatRate(restored.game.lockedBtcFiatRate ?? 100_000);
       setDealerEnabled(restored.game.dealer.enabled);
-      setDealerMode(restored.game.dealer.mode === 'FIXED' ? 'FIXED' : 'PERCENT');
+      setDealerMode(normalizeDealerMode(restored.game.dealer.mode));
       setDealerValue(restored.game.dealer.value ?? 10);
       setDealerLabel(restored.game.dealer.label ?? 'Dealer');
       setDealerPayment(restored.game.dealer.preferredPayment === 'LIGHTNING' ? 'LIGHTNING' : 'CASH');
       setDealerLightningAddress(restored.game.dealer.lightningAddress ?? '');
     }
   }
+
+  useEffect(() => {
+    if (typeof window === 'undefined') return;
+    const media = window.matchMedia('(prefers-color-scheme: dark)');
+    const apply = () => applyResolvedTheme(resolveTheme(themePreference, media.matches));
+    saveThemePreference(window.localStorage, themePreference);
+    apply();
+    if (themePreference !== 'AUTO') return;
+    media.addEventListener('change', apply);
+    return () => media.removeEventListener('change', apply);
+  }, [themePreference]);
 
   useEffect(() => {
     let active = true;
@@ -172,7 +211,7 @@ export default function App() {
     const savedAt = new Date().toISOString();
     saveSession(window.localStorage, snapshot(savedAt));
     setLastSavedAt(savedAt);
-  }, [game, players, contributions, invoices, stacks, stacksLocked, settlement, payouts, dealerPaid, ledger, projectDonations]);
+  }, [game, players, contributions, invoices, stacks, stacksLocked, settlement, payouts, dealerPaid, dealerTips, ledger, projectDonations]);
 
   async function execute(action: () => void | Promise<void>) {
     try {
@@ -210,7 +249,7 @@ export default function App() {
   async function startGame() {
     if (buyIn <= 0 || chipValue <= 0) throw new Error('La cave et la valeur du jeton doivent être positives');
     if (currency !== 'SATS' && btcFiatRate <= 0) throw new Error('Un taux BTC/fiat positif est requis pour les paiements Lightning');
-    if (dealerEnabled && dealerValue < 0) throw new Error('La rémunération du dealer ne peut pas être négative');
+    if (dealerEnabled && dealerMode !== 'NONE' && dealerValue < 0) throw new Error('La rémunération du dealer ne peut pas être négative');
     if (dealerEnabled && dealerMode === 'PERCENT' && dealerValue > 100) throw new Error('Le pourcentage dealer ne peut pas dépasser 100 %');
     if (dealerEnabled && dealerPayment === 'LIGHTNING' && !dealerLightningAddress.trim()) throw new Error('La destination Lightning du dealer est requise');
     if (startupDonationSats < 0 || !Number.isInteger(startupDonationSats)) throw new Error('Le don de démarrage doit être un nombre entier de sats');
@@ -227,7 +266,7 @@ export default function App() {
       dealer: dealerEnabled ? {
         enabled: true,
         mode: dealerMode,
-        value: dealerValue,
+        value: dealerMode === 'NONE' ? undefined : dealerValue,
         label: dealerLabel.trim() || 'Dealer',
         preferredPayment: dealerPayment,
         lightningAddress: dealerLightningAddress.trim() || undefined,
@@ -288,6 +327,13 @@ export default function App() {
     await record(game.id, kind === 'BUYIN' ? 'BUYIN_CREATED' : 'REBUY_CREATED', { contributionId: contribution.id, playerId: player.id, method: 'CASH', amount: contribution.amount });
     await record(game.id, 'CASH_CONFIRMED', { contributionId: contribution.id, playerId: player.id, amount: contribution.amount });
     await record(game.id, 'CONTRIBUTION_PAID', { contributionId: contribution.id, playerId: player.id, method: 'CASH' });
+  }
+
+  async function confirmCashRebuy() {
+    const player = cashRebuyConfirmation;
+    if (!player) return;
+    await addCashContribution(player, 'REBUY');
+    setCashRebuyConfirmation(null);
   }
 
   async function addLightningContribution(player: Player, kind: ContributionKind) {
@@ -427,6 +473,27 @@ export default function App() {
     await record(game.id, 'GAME_CLOSED', { payouts: payouts.filter((payout) => payout.amount > 0).length, ledgerEvents: ledgerRef.current.length + 1 });
   }
 
+  async function recordDealerTipForPlayer(player: Player) {
+    if (!game || game.status !== 'CLOSED') throw new Error('Clôture la partie avant d’enregistrer un tip dealer');
+    await assertLedgerIntegrity();
+    if (dealerTips.some((tip) => tip.playerId === player.id)) throw new Error(`${player.nickname} a déjà un tip dealer enregistré`);
+    const amount = dealerTipAmounts[player.id] ?? 0;
+    const method = dealerTipMethods[player.id] ?? (game.dealer.preferredPayment === 'LIGHTNING' ? 'LIGHTNING' : 'CASH');
+    const tip = createDealerTip(game, player.id, amount, method);
+    setDealerTips((current) => [...current, tip]);
+    await record(game.id, 'DEALER_TIP_RECORDED', {
+      tipId: tip.id,
+      playerId: player.id,
+      amount: tip.amount,
+      currency: tip.currency,
+      method: tip.method,
+      sats: tip.sats ?? null,
+      voluntary: true,
+      outsidePot: true,
+      execution: tip.method === 'LIGHTNING' ? 'MANUAL_EXTERNAL_WALLET' : 'CASH_CONFIRMATION',
+    });
+  }
+
   async function addEndDonation() {
     if (!game || game.status !== 'CLOSED') throw new Error('Les dons de fin sont proposés après clôture');
     await assertLedgerIntegrity();
@@ -472,6 +539,10 @@ export default function App() {
     setSettlement(null);
     setPayouts([]);
     setDealerPaid(false);
+    setDealerTips([]);
+    setDealerTipAmounts({});
+    setDealerTipMethods({});
+    setCashRebuyConfirmation(null);
     setProjectDonations([]);
     setLedger(emptyLedger);
     setLedgerVerified(true);
@@ -504,7 +575,16 @@ export default function App() {
           <h1>NOIOU</h1>
           <p className="tagline">La partie reste physique. NOIOU s’occupe seulement de la caisse et du règlement.</p>
         </div>
-        <span className="badge">Non-custodial by design</span>
+        <div className="header-controls">
+          <span className="badge">Non-custodial by design</span>
+          <label className="theme-control">Thème
+            <select value={themePreference} onChange={(event) => setThemePreference(event.target.value as ThemePreference)}>
+              <option value="AUTO">Auto</option>
+              <option value="LIGHT">Clair</option>
+              <option value="DARK">Sombre</option>
+            </select>
+          </label>
+        </div>
       </header>
 
       <nav className="steps" aria-label="Étapes de la partie">
@@ -553,21 +633,23 @@ export default function App() {
             <label className="check"><input type="checkbox" checked={dealerEnabled} onChange={(event) => setDealerEnabled(event.target.checked)} /> Dealer présent</label>
             {dealerEnabled && <>
               <label>Nom du dealer<input value={dealerLabel} onChange={(event) => setDealerLabel(event.target.value)} /></label>
-              <label>Mode dealer
-                <select value={dealerMode} onChange={(event) => setDealerMode(event.target.value as 'FIXED' | 'PERCENT')}>
-                  <option value="PERCENT">Pourcentage du pot</option>
+              <label>Rémunération du dealer
+                <select value={dealerMode} onChange={(event) => setDealerMode(event.target.value as 'NONE' | 'FIXED' | 'PERCENT')}>
+                  <option value="NONE">Non rémunéré</option>
                   <option value="FIXED">Montant fixe</option>
+                  <option value="PERCENT">Pourcentage du pot</option>
                 </select>
               </label>
-              <label>{dealerMode === 'PERCENT' ? 'Dealer (%)' : `Dealer (${currency})`}
+              {dealerMode !== 'NONE' && <label>{dealerMode === 'PERCENT' ? 'Dealer (%)' : `Dealer (${currency})`}
                 <input type="number" min="0" max={dealerMode === 'PERCENT' ? 100 : undefined} value={dealerValue} onChange={(event) => setDealerValue(Number(event.target.value))} />
-              </label>
-              <label>Règlement dealer
+              </label>}
+              <label>{dealerMode === 'NONE' ? 'Mode préféré pour les tips' : 'Règlement dealer'}
                 <select value={dealerPayment} onChange={(event) => setDealerPayment(event.target.value as PaymentMethod)}>
                   <option value="CASH">Espèces</option><option value="LIGHTNING">Lightning</option>
                 </select>
               </label>
-              {dealerPayment === 'LIGHTNING' && <label>Lightning Address dealer<input value={dealerLightningAddress} onChange={(event) => setDealerLightningAddress(event.target.value)} placeholder="dealer@wallet.example" /></label>}
+              {dealerPayment === 'LIGHTNING' && <label>Destination Lightning dealer<input value={dealerLightningAddress} onChange={(event) => setDealerLightningAddress(event.target.value)} placeholder="dealer@wallet.example" /><small>Le scan QR/BOLT12 arrive dans le prochain lot.</small></label>}
+              {dealerMode === 'NONE' && <p className="muted dealer-mode-note">Aucune somme ne sera retirée du pot. Après clôture, chaque joueur pourra enregistrer un tip volontaire séparé.</p>}
             </>}
           </div>
           {nwc.connected && <p className="muted">Sécurité alpha : chaque invoice de cave/rebuy NWC est plafonnée à {MAX_LIVE_GAME_INVOICE_SATS.toLocaleString('fr-FR')} sats. Le taux BTC/fiat affiché est celui verrouillé pour la partie.</p>}
@@ -623,7 +705,7 @@ export default function App() {
                       {invoice && contribution.status === 'PENDING' && <LightningInvoiceCard invoice={invoice} onSimulatePaid={() => void execute(() => checkLightningContribution(contribution.id))} />}
                     </div>;
                   })}
-                  {buyInPaid && <div className="actions"><button onClick={() => void execute(() => addCashContribution(player, 'REBUY'))}>+ Rebuy espèces</button><button onClick={() => void execute(() => addLightningContribution(player, 'REBUY'))}>+ Rebuy {lightningButtonLabel}</button></div>}
+                  {buyInPaid && <div className="actions"><button onClick={() => setCashRebuyConfirmation(player)}>+ Rebuy espèces</button><button onClick={() => void execute(() => addLightningContribution(player, 'REBUY'))}>+ Rebuy {lightningButtonLabel}</button></div>}
                 </div>
               );
             })}
@@ -685,10 +767,46 @@ export default function App() {
                 onConfirm={() => void execute(confirmDealerCompensation)}
               /> : <button disabled={dealerPaid || game.status === 'CLOSED'} onClick={() => void execute(confirmDealerCompensation)}>{dealerPaid ? 'Confirmé ✓' : 'Confirmer rémunération espèces'}</button>}
             </div>}
+            {game.dealer.enabled && settlement.dealerCompensation === 0 && <div className="dealer-line dealer-unpaid"><div><span>{game.dealer.label ?? 'Dealer'}</span><strong>Non rémunéré</strong></div><small>Le pot reste entièrement distribué aux joueurs. Les tips volontaires seront proposés après clôture.</small></div>}
             {game.status === 'SETTLING' && <><div className={`closure ${closure.allowed ? 'ready' : ''}`}>{closure.allowed ? 'Tous les règlements sont confirmés.' : closure.reasons.join(' · ')}</div><button className="primary wide" disabled={!closure.allowed} onClick={() => void execute(closeGame)}>Clôturer la partie</button></>}
             {game.status === 'CLOSED' && <div className="success">Partie clôturée : aucun règlement restant.</div>}
           </section>}
         </>
+      )}
+
+      {game?.status === 'CLOSED' && game.dealer.enabled && (
+        <section className="card dealer-tips">
+          <div className="section-title"><h2>Tip au dealer</h2><span>facultatif · hors pot</span></div>
+          <p className="muted">Chaque joueur peut choisir librement un tip. Il ne modifie ni son gain calculé ni la conservation de la partie.</p>
+          {players.map((player) => {
+            const existing = dealerTips.find((tip) => tip.playerId === player.id);
+            const payout = payouts.find((item) => item.playerId === player.id);
+            const amount = dealerTipAmounts[player.id] ?? 0;
+            const method = dealerTipMethods[player.id] ?? (game.dealer.preferredPayment === 'LIGHTNING' ? 'LIGHTNING' : 'CASH');
+            return <div className="tip-row" key={player.id}>
+              <div className="tip-player"><strong>{player.nickname}</strong><small>gain : {formatAmount(payout?.amount ?? 0, game.currency)}</small></div>
+              {existing ? <div className="tip-recorded"><strong>{formatAmount(existing.amount, existing.currency)} · {existing.method}</strong><small>Tip enregistré ✓</small></div> : <div className="tip-form">
+                <label>Montant du tip
+                  <input type="number" min={game.currency === 'SATS' ? 1 : 0.01} step={game.currency === 'SATS' ? 1 : 0.01} value={amount || ''} onChange={(event) => setDealerTipAmounts((current) => ({ ...current, [player.id]: Number(event.target.value) }))} placeholder={game.currency === 'SATS' ? '500' : '2'} />
+                </label>
+                <label>Mode
+                  <select value={method} onChange={(event) => setDealerTipMethods((current) => ({ ...current, [player.id]: event.target.value as PaymentMethod }))}>
+                    <option value="CASH">Espèces</option>
+                    <option value="LIGHTNING" disabled={!game.dealer.lightningAddress}>Lightning{!game.dealer.lightningAddress ? ' · destination manquante' : ''}</option>
+                  </select>
+                </label>
+                {method === 'LIGHTNING' && game.dealer.lightningAddress && amount > 0 ? <ManualLightningPayoutCard
+                  label={`Tip de ${player.nickname} → ${game.dealer.label ?? 'Dealer'}`}
+                  destination={game.dealer.lightningAddress}
+                  amount={amount}
+                  currency={game.currency}
+                  lockedBtcFiatRate={game.lockedBtcFiatRate}
+                  onConfirm={() => void execute(() => recordDealerTipForPlayer(player))}
+                /> : <button disabled={amount <= 0} onClick={() => void execute(() => recordDealerTipForPlayer(player))}>Confirmer tip remis en espèces</button>}
+              </div>}
+            </div>;
+          })}
+        </section>
       )}
 
       <section className="card ledger-card">
@@ -714,6 +832,15 @@ export default function App() {
       </section>
 
       {game?.status === 'CLOSED' && <section className="card"><div className="section-title"><h2>Nouvelle soirée</h2><span>la partie actuelle est terminée</span></div><p className="muted">Exporte la sauvegarde si tu veux conserver une copie portable, puis efface la session locale.</p><button onClick={resetSession}>Effacer cette session locale et créer une nouvelle partie</button></section>}
+
+      <ConfirmDialog
+        open={Boolean(cashRebuyConfirmation && game)}
+        title="Confirmer le rebuy espèces"
+        message={cashRebuyConfirmation && game ? `Confirmer le rebuy de ${formatAmount(game.rebuyAmount ?? game.buyInAmount, game.currency)} pour ${cashRebuyConfirmation.nickname} ?` : ''}
+        confirmLabel="Confirmer l’encaissement"
+        onCancel={() => setCashRebuyConfirmation(null)}
+        onConfirm={() => void execute(confirmCashRebuy)}
+      />
     </main>
   );
 }
