@@ -1,4 +1,4 @@
-export type LightningInvoiceSource = 'MOCK' | 'NWC';
+export type LightningInvoiceSource = 'MOCK' | 'NWC' | 'MANUAL_EXTERNAL';
 
 export interface LightningInvoice {
   id: string;
@@ -32,7 +32,8 @@ export class MockLightningAdapter implements LightningAdapter {
 
   restoreInvoice(invoice: LightningInvoice): void {
     if (!invoice.id.trim() || !Number.isInteger(invoice.sats) || invoice.sats <= 0) throw new Error('Invalid mock invoice snapshot');
-    this.invoices.set(invoice.id, { ...invoice, source: invoice.source ?? 'MOCK' });
+    if (invoice.source && invoice.source !== 'MOCK') throw new Error('Only mock invoices can be restored in MockLightningAdapter');
+    this.invoices.set(invoice.id, { ...invoice, source: 'MOCK' });
   }
 
   async createInvoice(sats: number, memo = 'NOIOU buy-in'): Promise<LightningInvoice> {
