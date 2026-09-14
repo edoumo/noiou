@@ -1,4 +1,5 @@
 import App from './App';
+import CashBuyInConfirmationBoundary from './CashBuyInConfirmationBoundary';
 import InteractionPreferences from './InteractionPreferences';
 import NwcReceiveDiagnostic from './NwcReceiveDiagnostic';
 import { NwcSessionProvider } from './NwcSessionContext';
@@ -8,7 +9,7 @@ import './uxFixes.css';
 export default function AppShell() {
   return (
     <NwcSessionProvider>
-      <App />
+      <CashBuyInConfirmationBoundary><App /></CashBuyInConfirmationBoundary>
       <SessionResetControl />
       <NwcReceiveDiagnostic />
       <InteractionPreferences />
