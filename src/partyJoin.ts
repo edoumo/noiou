@@ -36,6 +36,14 @@ function decodeBase64Url<T>(value: string): T {
   return JSON.parse(new TextDecoder().decode(bytes)) as T;
 }
 
+function decodeOrThrow<T>(value: string, message: string): T {
+  try {
+    return decodeBase64Url<T>(value);
+  } catch {
+    throw new Error(message);
+  }
+}
+
 function validCurrency(value: unknown): value is Currency {
   return value === 'EUR' || value === 'USD' || value === 'SATS';
 }
@@ -68,7 +76,7 @@ export function parsePartyInvite(input: string): PartyInvite {
     // A raw encoded invite is accepted by the in-app scanner as well.
   }
   if (!encoded) throw new Error('QR de partie invalide');
-  const invite = decodeBase64Url<Partial<PartyInvite>>(encoded);
+  const invite = decodeOrThrow<Partial<PartyInvite>>(encoded, 'QR de partie invalide');
   if (invite.v !== PARTY_JOIN_VERSION || invite.type !== 'PARTY_INVITE' || typeof invite.gameId !== 'string' || !invite.gameId.trim() || !validCurrency(invite.currency) || typeof invite.buyInAmount !== 'number' || !Number.isFinite(invite.buyInAmount) || invite.buyInAmount <= 0 || typeof invite.createdAt !== 'string') {
     throw new Error('QR de partie invalide');
   }
@@ -105,7 +113,7 @@ export function encodePartyJoinResponse(response: PartyJoinResponse): string {
 export function parsePartyJoinResponse(input: string): PartyJoinResponse {
   const trimmed = input.trim();
   if (!trimmed.startsWith(PARTY_JOIN_RESPONSE_PREFIX)) throw new Error('Réponse joueur invalide');
-  const response = decodeBase64Url<Partial<PartyJoinResponse>>(trimmed.slice(PARTY_JOIN_RESPONSE_PREFIX.length));
+  const response = decodeOrThrow<Partial<PartyJoinResponse>>(trimmed.slice(PARTY_JOIN_RESPONSE_PREFIX.length), 'Réponse joueur invalide');
   if (response.v !== PARTY_JOIN_VERSION || response.type !== 'PARTY_JOIN_RESPONSE' || typeof response.gameId !== 'string' || !response.gameId.trim() || typeof response.nickname !== 'string' || !response.nickname.trim() || !validPayment(response.preferredPayment)) {
     throw new Error('Réponse joueur invalide');
   }
