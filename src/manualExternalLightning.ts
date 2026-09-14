@@ -77,7 +77,9 @@ export function parseBolt11AmountFromHrp(hrp: string): Bolt11Amount | null {
 
 export function parseExactBolt11Invoice(input: string, expectedSats: number): string {
   if (!Number.isInteger(expectedSats) || expectedSats <= 0) throw new Error('Montant attendu invalide');
-  const normalized = unwrapLightning(input).toLowerCase();
+  const unwrapped = unwrapLightning(input);
+  if (/[a-z]/.test(unwrapped) && /[A-Z]/.test(unwrapped)) throw new Error('Invoice BOLT11 invalide : casse Bech32 mélangée');
+  const normalized = unwrapped.toLowerCase();
   const parsed = parseLightningDestination(normalized);
   if (parsed.kind !== 'BOLT11_INVOICE') throw new Error('Scanne ou colle une invoice BOLT11 Lightning ponctuelle');
   if (!verifyBech32(normalized)) throw new Error('Invoice BOLT11 invalide : checksum Bech32 incorrect');
