@@ -20,6 +20,7 @@ export type LedgerEventType =
   | 'SETTLEMENT_CALCULATED'
   | 'PAYOUT_CONFIRMED'
   | 'DEALER_COMPENSATION_CONFIRMED'
+  | 'DEALER_TIP_RECORDED'
   | 'PROJECT_DONATION_RECORDED'
   | 'GAME_CLOSED';
 
@@ -82,6 +83,17 @@ export interface Payout {
   amount: number;
   method: PaymentMethod | 'ANY';
   status: PayoutStatus;
+}
+
+export interface DealerTip {
+  id: string;
+  gameId: string;
+  playerId: string;
+  amount: number;
+  currency: Currency;
+  method: PaymentMethod;
+  sats?: number;
+  createdAt: string;
 }
 
 export interface ProjectDonation {
