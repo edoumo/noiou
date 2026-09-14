@@ -12,6 +12,7 @@ import type {
   Game,
   LedgerEvent,
   LedgerEventType,
+  LightningReceiveMode,
   PaymentMethod,
   Payout,
   Player,
@@ -28,10 +29,12 @@ import {
 } from './game';
 import { appendLedgerEvent, verifyLedger } from './ledger';
 import LightningDestinationField from './LightningDestinationField';
-import { normalizeReusableLightningDestination } from './lightningDestination';
+import { normalizeReusableLightningDestination, parseLightningDestination } from './lightningDestination';
 import LightningInvoiceCard from './LightningInvoiceCard';
+import ManualExternalLightningReceiptCard from './ManualExternalLightningReceiptCard';
 import ManualLightningPayoutCard from './ManualLightningPayoutCard';
 import { MockLightningAdapter, type LightningInvoice } from './lightning';
+import { buildManualExternalReference, parseExactBolt11Invoice } from './manualExternalLightning';
 import { MAX_LIVE_GAME_INVOICE_SATS, useNwcSession } from './NwcSessionContext';
 import {
   clearSession,
@@ -81,7 +84,7 @@ function normalizeDealerMode(mode: DealerMode | undefined): 'NONE' | 'FIXED' | '
 }
 
 function mockInvoicesOnly(invoices: Record<string, LightningInvoice>): LightningInvoice[] {
-  return Object.values(invoices).filter((invoice) => invoice.source !== 'NWC');
+  return Object.values(invoices).filter((invoice) => !invoice.source || invoice.source === 'MOCK');
 }
 
 function workflowStep(game: Game | null): number {
@@ -89,6 +92,12 @@ function workflowStep(game: Game | null): number {
   if (game.status === 'OPEN') return 2;
   if (game.status === 'SETTLING') return 3;
   return 4;
+}
+
+function receiveModeLabel(mode: LightningReceiveMode): string {
+  if (mode === 'NWC_RECEIVE_ONLY') return 'NWC automatique';
+  if (mode === 'EXTERNAL_WALLET_MANUAL') return 'Wallet externe manuel';
+  return 'Mock';
 }
 
 export default function App() {
@@ -104,6 +113,8 @@ export default function App() {
   const [buyIn, setBuyIn] = useState(initialSession?.game?.buyInAmount ?? 20);
   const [chipValue, setChipValue] = useState(initialSession?.game?.chipValue ?? 1);
   const [btcFiatRate, setBtcFiatRate] = useState(initialSession?.game?.lockedBtcFiatRate ?? 100_000);
+  const [lightningReceiveMode, setLightningReceiveMode] = useState<LightningReceiveMode>(initialSession?.game?.lightningReceiveMode ?? 'MOCK');
+  const [organizerLightningDestination, setOrganizerLightningDestination] = useState(initialSession?.game?.organizerLightningDestination ?? '');
   const [dealerEnabled, setDealerEnabled] = useState(initialSession?.game?.dealer.enabled ?? false);
   const [dealerMode, setDealerMode] = useState<'NONE' | 'FIXED' | 'PERCENT'>(() => normalizeDealerMode(initialSession?.game?.dealer.mode));
   const [dealerValue, setDealerValue] = useState(initialSession?.game?.dealer.value ?? 10);
@@ -180,6 +191,8 @@ export default function App() {
       setBuyIn(restored.game.buyInAmount);
       setChipValue(restored.game.chipValue);
       setBtcFiatRate(restored.game.lockedBtcFiatRate ?? 100_000);
+      setLightningReceiveMode(restored.game.lightningReceiveMode ?? 'MOCK');
+      setOrganizerLightningDestination(restored.game.organizerLightningDestination ?? '');
       setDealerEnabled(restored.game.dealer.enabled);
       setDealerMode(normalizeDealerMode(restored.game.dealer.mode));
       setDealerValue(restored.game.dealer.value ?? 10);
@@ -251,6 +264,8 @@ export default function App() {
   async function startGame() {
     if (buyIn <= 0 || chipValue <= 0) throw new Error('La cave et la valeur du jeton doivent être positives');
     if (currency !== 'SATS' && btcFiatRate <= 0) throw new Error('Un taux BTC/fiat positif est requis pour les paiements Lightning');
+    if (lightningReceiveMode === 'EXTERNAL_WALLET_MANUAL' && currency !== 'SATS') throw new Error('Alpha wallet externe réel : utilise une partie en SATS. EUR/USD restent en mock tant que le modèle monétaire exact n’est pas migré.');
+    if (lightningReceiveMode === 'NWC_RECEIVE_ONLY' && !nwc.connected) throw new Error('Connecte et arme explicitement un wallet NWC receive-only avant de démarrer une partie en mode NWC réel');
     if (dealerEnabled && dealerMode !== 'NONE' && dealerValue < 0) throw new Error('La rémunération du dealer ne peut pas être négative');
     if (dealerEnabled && dealerMode === 'PERCENT' && dealerValue > 100) throw new Error('Le pourcentage dealer ne peut pas dépasser 100 %');
     if (dealerEnabled && dealerPayment === 'LIGHTNING' && !dealerLightningAddress.trim()) throw new Error('La destination Lightning du dealer est requise');
@@ -258,6 +273,9 @@ export default function App() {
 
     const normalizedDealerDestination = dealerEnabled && dealerPayment === 'LIGHTNING'
       ? normalizeReusableLightningDestination(dealerLightningAddress)
+      : undefined;
+    const normalizedOrganizerDestination = lightningReceiveMode === 'EXTERNAL_WALLET_MANUAL' && organizerLightningDestination.trim()
+      ? normalizeReusableLightningDestination(organizerLightningDestination)
       : undefined;
     const createdAt = new Date().toISOString();
     const created: Game = {
@@ -276,6 +294,8 @@ export default function App() {
         preferredPayment: dealerPayment,
         lightningAddress: normalizedDealerDestination,
       } : { enabled: false, mode: 'NONE' },
+      lightningReceiveMode,
+      organizerLightningDestination: normalizedOrganizerDestination,
       lockedBtcFiatRate: currency === 'SATS' ? undefined : btcFiatRate,
       createdAt,
     };
@@ -286,7 +306,8 @@ export default function App() {
       chipValue: created.chipValue,
       lockedBtcFiatRate: created.lockedBtcFiatRate ?? null,
       dealer: created.dealer,
-      lightningReceiveMode: nwc.connected ? 'NWC_RECEIVE_ONLY' : 'MOCK',
+      lightningReceiveMode: created.lightningReceiveMode,
+      organizerDestinationConfigured: Boolean(created.organizerLightningDestination),
     });
     if (startupDonationSats > 0) await recordDonation(created.id, startupDonationSats, 'Organisateur');
   }
@@ -296,7 +317,6 @@ export default function App() {
     const cleanNickname = nickname.trim();
     if (!cleanNickname) throw new Error('Le pseudo est obligatoire');
     if (players.some((player) => player.nickname.toLocaleLowerCase() === cleanNickname.toLocaleLowerCase())) throw new Error('Ce pseudo est déjà utilisé');
-    if (preferredPayment === 'LIGHTNING' && !lightningAddress.trim()) throw new Error('Une destination Lightning est requise pour un joueur Lightning');
 
     const normalizedLightningDestination = lightningAddress.trim()
       ? normalizeReusableLightningDestination(lightningAddress)
@@ -311,7 +331,7 @@ export default function App() {
     setStacks((current) => ({ ...current, [player.id]: 0 }));
     setNickname('');
     setLightningAddress('');
-    await record(game.id, 'PLAYER_JOINED', { playerId: player.id, nickname: player.nickname, preferredPayment: player.preferredPayment });
+    await record(game.id, 'PLAYER_JOINED', { playerId: player.id, nickname: player.nickname, preferredPayment: player.preferredPayment, reusableLightningDestination: Boolean(player.lightningAddress) });
   }
 
   function hasPaidBuyIn(playerId: string): boolean {
@@ -353,15 +373,88 @@ export default function App() {
     const contribution = createContribution(game, player.id, kind, 'LIGHTNING');
     const sats = toSats(contribution.amount, game);
     if (sats <= 0) throw new Error('Le montant converti en sats est trop faible');
+    const receiveMode = game.lightningReceiveMode ?? (nwc.connected ? 'NWC_RECEIVE_ONLY' : 'MOCK');
+
+    if (receiveMode === 'EXTERNAL_WALLET_MANUAL') {
+      if (game.currency !== 'SATS') throw new Error('Les encaissements wallet externe réels sont limités aux parties en SATS dans cette alpha');
+      const reference = buildManualExternalReference();
+      const manualRequest: LightningInvoice = {
+        id: reference,
+        request: game.organizerLightningDestination ?? '',
+        sats,
+        status: 'PENDING',
+        source: 'MANUAL_EXTERNAL',
+      };
+      setContributions(markContributionPending([...contributions, contribution], contribution.id, reference));
+      setInvoices((current) => ({ ...current, [contribution.id]: manualRequest }));
+      await record(game.id, kind === 'BUYIN' ? 'BUYIN_CREATED' : 'REBUY_CREATED', {
+        contributionId: contribution.id,
+        playerId: player.id,
+        method: 'LIGHTNING',
+        amount: contribution.amount,
+        sats,
+        source: 'MANUAL_EXTERNAL',
+      });
+      await record(game.id, 'LIGHTNING_MANUAL_REQUEST_CREATED', {
+        contributionId: contribution.id,
+        reference,
+        sats,
+        requestKind: manualRequest.request ? parseLightningDestination(manualRequest.request).kind : 'BOLT11_REQUIRED',
+      });
+      return;
+    }
+
     const memo = `NOIOU ${kind.toLowerCase()} ${player.nickname}`;
-    const invoice = nwc.connected
-      ? await nwc.createInvoice(sats, memo)
-      : await adapterRef.current!.createInvoice(sats, memo);
+    let invoice: LightningInvoice;
+    if (receiveMode === 'NWC_RECEIVE_ONLY') {
+      if (!nwc.connected) throw new Error('Cette partie utilise NWC réel : reconnecte le wallet receive-only avant de créer une nouvelle cave/rebuy');
+      invoice = await nwc.createInvoice(sats, memo);
+    } else {
+      invoice = await adapterRef.current!.createInvoice(sats, memo);
+    }
     const pending = markContributionPending([...contributions, contribution], contribution.id, invoice.id);
     setContributions(pending);
     setInvoices((current) => ({ ...current, [contribution.id]: invoice }));
     await record(game.id, kind === 'BUYIN' ? 'BUYIN_CREATED' : 'REBUY_CREATED', { contributionId: contribution.id, playerId: player.id, method: 'LIGHTNING', amount: contribution.amount, sats, source: invoice.source ?? 'MOCK' });
     await record(game.id, 'LIGHTNING_INVOICE_CREATED', { contributionId: contribution.id, invoiceId: invoice.id, sats, source: invoice.source ?? 'MOCK' });
+  }
+
+  async function setManualReceiptBolt11(contributionId: string, raw: string) {
+    const invoice = invoices[contributionId];
+    if (!invoice || invoice.source !== 'MANUAL_EXTERNAL') throw new Error('Encaissement wallet externe introuvable');
+    const normalized = parseExactBolt11Invoice(raw, invoice.sats);
+    setInvoices((current) => ({ ...current, [contributionId]: { ...current[contributionId], request: normalized } }));
+  }
+
+  async function confirmManualLightningContribution(contributionId: string) {
+    if (!game) throw new Error('Aucune partie');
+    await assertLedgerIntegrity();
+    const contribution = contributions.find((item) => item.id === contributionId);
+    const invoice = invoices[contributionId];
+    if (!contribution?.externalReference || !invoice || invoice.source !== 'MANUAL_EXTERNAL') throw new Error('Encaissement wallet externe introuvable');
+    if (!invoice.request.trim()) throw new Error('Scanne une invoice BOLT11 du wallet organisateur ou configure une destination réutilisable avant de confirmer');
+
+    const parsed = parseLightningDestination(invoice.request);
+    if (parsed.kind === 'BOLT11_INVOICE') parseExactBolt11Invoice(invoice.request, invoice.sats);
+    else normalizeReusableLightningDestination(invoice.request);
+
+    setInvoices((current) => ({ ...current, [contributionId]: { ...current[contributionId], status: 'PAID' } }));
+    setContributions((current) => confirmLightningContribution(current, contributionId, contribution.externalReference!));
+    await record(game.id, 'LIGHTNING_MANUAL_RECEIPT_CONFIRMED', {
+      contributionId,
+      playerId: contribution.playerId,
+      sats: invoice.sats,
+      requestKind: parsed.kind,
+      verification: 'MANUAL_EXTERNAL_WALLET',
+    });
+    await record(game.id, 'CONTRIBUTION_PAID', {
+      contributionId,
+      playerId: contribution.playerId,
+      method: 'LIGHTNING',
+      invoiceId: contribution.externalReference,
+      source: 'MANUAL_EXTERNAL',
+      verification: 'MANUAL_EXTERNAL_WALLET',
+    });
   }
 
   async function checkLightningContribution(contributionId: string) {
@@ -370,6 +463,7 @@ export default function App() {
     const contribution = contributions.find((item) => item.id === contributionId);
     const invoice = invoices[contributionId];
     if (!contribution?.externalReference || !invoice) throw new Error('Invoice introuvable');
+    if (invoice.source === 'MANUAL_EXTERNAL') throw new Error('Cet encaissement doit être confirmé explicitement depuis la carte wallet externe');
 
     let status: LightningInvoice['status'];
     if (invoice.source === 'NWC') {
@@ -423,11 +517,20 @@ export default function App() {
   }
 
   function choosePayoutMethod(player: Player, method: PaymentMethod) {
-    if (method === 'LIGHTNING') {
-      if (!player.lightningAddress) throw new Error(`Ajoute une destination Lightning pour ${player.nickname} avant de choisir ce mode`);
-      normalizeReusableLightningDestination(player.lightningAddress);
+    let lightningRequest: string | undefined;
+    if (method === 'LIGHTNING' && player.lightningAddress) {
+      lightningRequest = normalizeReusableLightningDestination(player.lightningAddress);
     }
-    setPayouts((current) => current.map((payout) => payout.playerId === player.id && payout.status === 'PENDING' ? { ...payout, method } : payout));
+    setPayouts((current) => current.map((payout) => payout.playerId === player.id && payout.status === 'PENDING' ? { ...payout, method, lightningRequest } : payout));
+  }
+
+  function setPayoutBolt11(playerId: string, raw: string) {
+    if (!game) throw new Error('Aucune partie');
+    const payout = payouts.find((item) => item.playerId === playerId);
+    if (!payout || payout.status !== 'PENDING') throw new Error('Payout introuvable');
+    const sats = toSats(payout.amount, game);
+    const normalized = parseExactBolt11Invoice(raw, sats);
+    setPayouts((current) => current.map((item) => item.playerId === playerId ? { ...item, method: 'LIGHTNING', lightningRequest: normalized } : item));
   }
 
   async function confirmPlayerPayout(payout: Payout) {
@@ -439,11 +542,16 @@ export default function App() {
     if (payout.method === 'ANY') throw new Error(`Choisis d’abord le mode de règlement de ${player.nickname}`);
 
     let sats: number | undefined;
+    let requestKind: string | null = null;
     if (payout.method === 'LIGHTNING') {
-      if (!player.lightningAddress) throw new Error(`Destination Lightning manquante pour ${player.nickname}`);
-      normalizeReusableLightningDestination(player.lightningAddress);
       sats = toSats(payout.amount, game);
       if (sats <= 0) throw new Error('Le paiement Lightning converti vaut 0 sat');
+      const request = payout.lightningRequest ?? player.lightningAddress;
+      if (!request) throw new Error(`Scanne une invoice BOLT11 de ${sats.toLocaleString('fr-FR')} sats pour ${player.nickname}, ou renseigne une destination Lightning réutilisable`);
+      const parsed = parseLightningDestination(request);
+      if (parsed.kind === 'BOLT11_INVOICE') parseExactBolt11Invoice(request, sats);
+      else normalizeReusableLightningDestination(request);
+      requestKind = parsed.kind;
     }
 
     setPayouts((current) => confirmPayout(current, payout.playerId));
@@ -452,6 +560,7 @@ export default function App() {
       method: payout.method,
       amount: payout.amount,
       sats: sats ?? null,
+      requestKind,
       execution: payout.method === 'LIGHTNING' ? 'MANUAL_EXTERNAL_WALLET' : 'CASH_CONFIRMATION',
     });
   }
@@ -568,6 +677,8 @@ export default function App() {
     setBackupStatus('');
     setStartupDonationSats(0);
     setDonorLabel('');
+    setLightningReceiveMode('MOCK');
+    setOrganizerLightningDestination('');
   }
 
   const paidTotal = contributions.filter((contribution) => contribution.status === 'PAID').reduce((sum, contribution) => sum + contribution.amount, 0);
@@ -575,7 +686,12 @@ export default function App() {
   const closure = checkGameClosure(settlement, payouts, dealerPaid);
   const totalDonations = projectDonations.reduce((sum, donation) => sum + donation.sats, 0);
   const step = workflowStep(game);
-  const lightningButtonLabel = nwc.connected ? (nwc.transportConnected ? 'Lightning réel' : 'Lightning réel · reconnecter') : 'Lightning mock';
+  const activeReceiveMode = game?.lightningReceiveMode ?? lightningReceiveMode;
+  const lightningButtonLabel = activeReceiveMode === 'EXTERNAL_WALLET_MANUAL'
+    ? 'wallet externe'
+    : activeReceiveMode === 'NWC_RECEIVE_ONLY'
+      ? (nwc.transportConnected ? 'NWC réel' : 'NWC réel · reconnecter')
+      : 'Lightning mock';
   const nwcMode = nwc.activeGameLockedToNwc && !nwc.transportConnected
     ? 'RECONNECT_REQUIRED'
     : nwc.liveGameReceiptsArmed && nwc.transportConnected
@@ -609,9 +725,10 @@ export default function App() {
       </nav>
 
       {sessionRestored && <div className="session-note"><span>Session locale restaurée · aucun secret wallet n’est stocké. Une invoice NWC en attente nécessite de reconnecter le wallet pour vérifier son paiement.</span><button onClick={() => setSessionRestored(false)}>OK</button></div>}
+      {game?.lightningReceiveMode === 'EXTERNAL_WALLET_MANUAL' && <div className="session-note live-note"><span>⚡ Wallet Lightning externe : caves/rebuys réels en SATS, sans NWC. NOIOU ne voit pas le wallet ; l’organisateur confirme uniquement après avoir vérifié l’encaissement dans son wallet.</span></div>}
       {nwcMode === 'LIVE_ARMED' && <div className="session-note live-note"><span>⚡ Réception NWC réelle armée{nwc.connection?.alias ? ` · ${nwc.connection.alias}` : ''}. Les caves/rebuys créditent directement le wallet de l’organisateur. Les payouts restent manuels hors NOIOU.</span></div>}
       {nwcMode === 'RECONNECT_REQUIRED' && <div className="session-note reconnect-note"><span>⚠️ Cette partie est verrouillée en NWC réel mais le wallet est déconnecté. Reconnecte le même wallet receive-only avant toute nouvelle cave/rebuy ou vérification d’invoice.</span></div>}
-      {nwcMode === 'DIAGNOSTIC' && <div className="session-note"><span>Wallet NWC connecté en diagnostic uniquement. Les caves de partie restent en mock tant que tu n’armes pas explicitement la réception réelle.</span></div>}
+      {nwcMode === 'DIAGNOSTIC' && <div className="session-note"><span>Wallet NWC connecté en diagnostic uniquement. Les caves de partie ne deviennent NWC réelles que si tu sélectionnes NWC automatique et armes explicitement la réception.</span></div>}
       {game && <div className="save-note">Sauvegarde locale automatique {lastSavedAt ? `· ${new Date(lastSavedAt).toLocaleTimeString('fr-FR')}` : ''}</div>}
       {backupStatus && <div className="session-note"><span>{backupStatus}</span><button onClick={() => setBackupStatus('')}>OK</button></div>}
       {error && <div className="alert" role="alert">{error}</div>}
@@ -631,7 +748,7 @@ export default function App() {
 
       {!game && (
         <section className="card">
-          <div className="section-title"><h2>Créer la partie</h2><span>{nwc.connected ? 'Lightning réel en réception seule' : 'Lightning mock tant que NWC réel n’est pas armé'}</span></div>
+          <div className="section-title"><h2>Créer la partie</h2><span>Réception Lightning : {receiveModeLabel(lightningReceiveMode)}</span></div>
           <div className="grid">
             <label>Devise
               <select value={currency} onChange={(event) => setCurrency(event.target.value as Currency)}>
@@ -647,6 +764,20 @@ export default function App() {
             {currency !== 'SATS' && <label>Taux BTC/{currency} verrouillé (prototype)
               <input type="number" min="1" value={btcFiatRate} onChange={(event) => setBtcFiatRate(Number(event.target.value))} />
             </label>}
+            <label>Réception Lightning des caves
+              <select value={lightningReceiveMode} onChange={(event) => setLightningReceiveMode(event.target.value as LightningReceiveMode)}>
+                <option value="MOCK">Mock / test</option>
+                <option value="NWC_RECEIVE_ONLY">NWC automatique</option>
+                <option value="EXTERNAL_WALLET_MANUAL">Wallet externe manuel (Phoenix, Blink, autre)</option>
+              </select>
+            </label>
+            {lightningReceiveMode === 'EXTERNAL_WALLET_MANUAL' && <LightningDestinationField
+              label="Destination Lightning de l’organisateur"
+              value={organizerLightningDestination}
+              onChange={setOrganizerLightningDestination}
+              optional
+              compactHint="Optionnelle. Adresse @, BOLT12, LNURL ou QR réutilisable. Sans destination réutilisable, NOIOU demandera une invoice BOLT11 du montant exact à chaque cave/rebuy."
+            />}
             <label className="check"><input type="checkbox" checked={dealerEnabled} onChange={(event) => setDealerEnabled(event.target.checked)} /> Dealer présent</label>
             {dealerEnabled && <>
               <label>Nom du dealer<input value={dealerLabel} onChange={(event) => setDealerLabel(event.target.value)} /></label>
@@ -669,12 +800,13 @@ export default function App() {
                 label="Destination Lightning dealer"
                 value={dealerLightningAddress}
                 onChange={setDealerLightningAddress}
-                compactHint="Adresse user@domain, offre BOLT12 (Phoenix) ou LNURL. Le QR peut être scanné directement avec la caméra."
+                compactHint="Adresse user@domain, offre BOLT12, LNURL ou QR réutilisable."
               />}
               {dealerMode === 'NONE' && <p className="muted dealer-mode-note">Aucune somme ne sera retirée du pot. Après clôture, chaque joueur pourra enregistrer un tip volontaire séparé.</p>}
             </>}
           </div>
-          {nwc.connected && <p className="muted">Sécurité alpha : chaque invoice de cave/rebuy NWC est plafonnée à {MAX_LIVE_GAME_INVOICE_SATS.toLocaleString('fr-FR')} sats. Le taux BTC/fiat affiché est celui verrouillé pour la partie.</p>}
+          {lightningReceiveMode === 'NWC_RECEIVE_ONLY' && <p className="muted">NWC réel exige un wallet connecté et explicitement armé. Chaque invoice de cave/rebuy est plafonnée à {MAX_LIVE_GAME_INVOICE_SATS.toLocaleString('fr-FR')} sats.</p>}
+          {lightningReceiveMode === 'EXTERNAL_WALLET_MANUAL' && <p className="muted">Mode réel limité aux parties en SATS dans cette alpha. Compatible par capacité, pas par marque : Phoenix, Blink ou tout wallet Lightning capable d’exposer une destination réutilisable ou de générer une invoice BOLT11.</p>}
           <div className="donation-options">
             <strong>❤️ Soutenir NOIOU au lancement (mock, hors cagnotte)</strong>
             <div className="actions">{[0, 500, 1000, 5000].map((sats) => <button className={startupDonationSats === sats ? 'selected' : ''} key={sats} onClick={() => setStartupDonationSats(sats)}>{sats === 0 ? 'Pas maintenant' : `${sats.toLocaleString('fr-FR')} sats`}</button>)}</div>
@@ -707,8 +839,8 @@ export default function App() {
                 label="Destination Lightning"
                 value={lightningAddress}
                 onChange={setLightningAddress}
-                optional={preferredPayment === 'ANY'}
-                compactHint="Tu peux saisir une adresse @, scanner un QR Phoenix/BOLT12 ou utiliser un LNURL réutilisable."
+                optional
+                compactHint="Optionnelle : adresse @, QR/BOLT12 ou LNURL réutilisable. Sans destination, le joueur pourra fournir une invoice BOLT11 du montant exact au moment du payout."
               />}
             </div>
             <button className="wide-mobile" onClick={() => void execute(addPlayer)}>Ajouter</button>
@@ -726,11 +858,18 @@ export default function App() {
                   {!buyInPaid && !hasOpenBuyIn(player.id) && <div className="actions"><button onClick={() => void execute(() => addCashContribution(player, 'BUYIN'))}>Cave espèces reçues</button><button onClick={() => void execute(() => addLightningContribution(player, 'BUYIN'))}>Cave {lightningButtonLabel}</button></div>}
                   {playerContributions.map((contribution) => {
                     const invoice = invoices[contribution.id];
+                    const sourceLabel = invoice?.source === 'NWC' ? ' · NWC réel' : invoice?.source === 'MANUAL_EXTERNAL' ? ' · wallet externe' : invoice ? ' · mock' : '';
                     return <div className="contribution" key={contribution.id}>
-                      <span>{contribution.kind} · {contribution.method}{invoice?.source === 'NWC' ? ' · NWC réel' : invoice ? ' · mock' : ''}</span>
+                      <span>{contribution.kind} · {contribution.method}{sourceLabel}</span>
                       <strong>{formatAmount(contribution.amount, game.currency)}</strong>
                       <em className={`state ${contribution.status.toLowerCase()}`}>{contribution.status}</em>
-                      {invoice && contribution.status === 'PENDING' && <LightningInvoiceCard invoice={invoice} onSimulatePaid={() => void execute(() => checkLightningContribution(contribution.id))} />}
+                      {invoice && contribution.status === 'PENDING' && (invoice.source === 'MANUAL_EXTERNAL'
+                        ? <ManualExternalLightningReceiptCard
+                            request={invoice}
+                            onUseBolt11={(raw) => setManualReceiptBolt11(contribution.id, raw)}
+                            onConfirmReceived={() => confirmManualLightningContribution(contribution.id)}
+                          />
+                        : <LightningInvoiceCard invoice={invoice} onSimulatePaid={() => void execute(() => checkLightningContribution(contribution.id))} />)}
                     </div>;
                   })}
                   {buyInPaid && <div className="actions"><button onClick={() => setCashRebuyConfirmation(player)}>+ Rebuy espèces</button><button onClick={() => void execute(() => addLightningContribution(player, 'REBUY'))}>+ Rebuy {lightningButtonLabel}</button></div>}
@@ -759,9 +898,10 @@ export default function App() {
 
           {settlement?.balanced && <section className="card settlement-card">
             <div className="section-title"><h2>Règlements</h2><span>Lightning = paiement manuel dans le wallet de l’organisateur</span></div>
-            <p className="muted settlement-help">Pour Lightning, copie l’instruction, paie dans ton wallet, puis coche la confirmation exacte. NOIOU n’a aucune permission de dépense.</p>
+            <p className="muted settlement-help">Une destination réutilisable est pratique mais facultative : un gagnant peut aussi générer une invoice BOLT11 du montant exact et la faire scanner. NOIOU n’a aucune permission de dépense.</p>
             <div className="payouts">{payouts.filter((payout) => payout.amount > 0).map((payout) => {
               const player = players.find((candidate) => candidate.id === payout.playerId)!;
+              const payoutDestination = payout.lightningRequest ?? player.lightningAddress;
               return <div className="payout" key={payout.playerId}>
                 <span>{player.nickname}</span>
                 <strong>{formatAmount(payout.amount, game.currency)}</strong>
@@ -770,16 +910,17 @@ export default function App() {
                   <strong>Comment veux-tu régler {player.nickname} ?</strong>
                   <div className="actions">
                     <button onClick={() => void execute(() => choosePayoutMethod(player, 'CASH'))}>Espèces</button>
-                    <button disabled={!player.lightningAddress} onClick={() => void execute(() => choosePayoutMethod(player, 'LIGHTNING'))}>Lightning{!player.lightningAddress ? ' · destination manquante' : ''}</button>
+                    <button onClick={() => void execute(() => choosePayoutMethod(player, 'LIGHTNING'))}>Lightning</button>
                   </div>
                 </div>}
                 {game.status !== 'CLOSED' && payout.status !== 'CONFIRMED' && payout.method === 'CASH' && <button onClick={() => void execute(() => confirmPlayerPayout(payout))}>Confirmer remise espèces</button>}
-                {game.status !== 'CLOSED' && payout.status !== 'CONFIRMED' && payout.method === 'LIGHTNING' && player.lightningAddress && <ManualLightningPayoutCard
+                {game.status !== 'CLOSED' && payout.status !== 'CONFIRMED' && payout.method === 'LIGHTNING' && <ManualLightningPayoutCard
                   label={player.nickname}
-                  destination={player.lightningAddress}
+                  destination={payoutDestination}
                   amount={payout.amount}
                   currency={game.currency}
                   lockedBtcFiatRate={game.lockedBtcFiatRate}
+                  onUseBolt11={(raw) => setPayoutBolt11(player.id, raw)}
                   onConfirm={() => void execute(() => confirmPlayerPayout(payout))}
                 />}
               </div>;
@@ -844,20 +985,22 @@ export default function App() {
       </section>
 
       <section className={`card nwc-preview ${nwcMode === 'RECONNECT_REQUIRED' ? 'nwc-reconnect' : ''}`}>
-        <div><h2>NWC</h2><p>{nwcMode === 'LIVE_ARMED'
-          ? `Réception réelle armée${nwc.connection?.alias ? ` sur ${nwc.connection.alias}` : ''}. Les caves/rebuys créent de vraies invoices. Les sorties restent manuelles.`
-          : nwcMode === 'RECONNECT_REQUIRED'
-            ? 'Partie réelle active, wallet déconnecté : aucune nouvelle cave NWC ne sera créée tant que le wallet receive-only n’est pas reconnecté. Aucun fallback mock.'
-            : nwcMode === 'DIAGNOSTIC'
-              ? 'Wallet connecté en diagnostic seulement. Les caves de partie restent mock jusqu’à armement explicite.'
-              : 'Mode mock : aucune cave Lightning réelle. Connecte puis arme explicitement un wallet receive-only pour une partie réelle.'}
+        <div><h2>Lightning organisateur</h2><p>{game?.lightningReceiveMode === 'EXTERNAL_WALLET_MANUAL'
+          ? 'Wallet externe manuel actif : Phoenix, Blink ou autre wallet Lightning. NOIOU affiche/valide la demande et l’organisateur atteste l’encaissement après vérification dans son wallet.'
+          : nwcMode === 'LIVE_ARMED'
+            ? `NWC réel armé${nwc.connection?.alias ? ` sur ${nwc.connection.alias}` : ''}. Les caves/rebuys créent de vraies invoices. Les sorties restent manuelles.`
+            : nwcMode === 'RECONNECT_REQUIRED'
+              ? 'Partie NWC réelle active, wallet déconnecté : reconnecte le même wallet receive-only. Aucun fallback mock.'
+              : nwcMode === 'DIAGNOSTIC'
+                ? 'Wallet NWC connecté en diagnostic seulement. Sélectionne NWC automatique et arme explicitement la réception pour l’utiliser en partie.'
+                : 'Tu peux rester en mock, utiliser NWC receive-only, ou choisir un wallet Lightning externe avec confirmation manuelle.'}
           </p>
           <details className="wallet-help">
-            <summary>À quoi sert NWC ? Et si j’utilise Phoenix ?</summary>
-            <p>NWC sert à relier NOIOU au wallet de l’organisateur pour créer et vérifier automatiquement les invoices entrantes, sans donner de permission de dépense. Phoenix mobile peut déjà être utilisé comme destination de règlement grâce à son QR/offre BOLT12 : scanne le QR dans la fiche joueur ou dealer. La réception automatisée de caves reste, dans cette alpha, réservée à un wallet qui fournit une connexion NWC.</p>
+            <summary>NWC, Phoenix, Blink ou autre wallet : que choisir ?</summary>
+            <p>NWC automatise la création et la vérification des invoices entrantes sans permission de dépense. Le mode wallet externe fonctionne avec des capacités Lightning standards plutôt qu’avec une marque : destination réutilisable (Lightning Address, BOLT12, LNURL) ou invoice BOLT11 ponctuelle du montant exact. Phoenix et Blink font partie des wallets de référence, mais ils ne sont pas codés en dur.</p>
           </details>
         </div>
-        <span className={`state ${nwcMode === 'LIVE_ARMED' ? 'paid' : 'pending'}`}>{nwcMode === 'LIVE_ARMED' ? 'RÉEL ARMÉ' : nwcMode === 'RECONNECT_REQUIRED' ? 'RECONNECTER' : nwcMode === 'DIAGNOSTIC' ? 'DIAGNOSTIC' : 'MOCK'}</span>
+        <span className={`state ${game?.lightningReceiveMode === 'EXTERNAL_WALLET_MANUAL' || nwcMode === 'LIVE_ARMED' ? 'paid' : 'pending'}`}>{game?.lightningReceiveMode === 'EXTERNAL_WALLET_MANUAL' ? 'EXTERNE' : nwcMode === 'LIVE_ARMED' ? 'NWC RÉEL' : nwcMode === 'RECONNECT_REQUIRED' ? 'RECONNECTER' : nwcMode === 'DIAGNOSTIC' ? 'DIAGNOSTIC' : 'MOCK'}</span>
       </section>
 
       <section className="card donation">
