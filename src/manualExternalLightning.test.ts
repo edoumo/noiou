@@ -44,8 +44,11 @@ describe('manual external Lightning helpers', () => {
     expect(() => parseExactBolt11Invoice(invoice, 2000)).toThrow(/Montant BOLT11 incorrect/);
   });
 
-  it('rejects an invoice with an invalid checksum', () => {
+  it('rejects invalid checksum and mixed Bech32 case', () => {
     expect(() => parseExactBolt11Invoice('lnbc10u1qqqqqqq', 1000)).toThrow(/checksum/);
+    const valid = bech32('lnbc10u');
+    const mixed = `${valid.slice(0, 2).toUpperCase()}${valid.slice(2)}`;
+    expect(() => parseExactBolt11Invoice(mixed, 1000)).toThrow(/casse Bech32/);
   });
 
   it('creates namespaced manual receipt references', () => {
