@@ -14,8 +14,8 @@ export function createDealerTip(
   playerId: string,
   amount: number,
   method: PaymentMethod,
-  id = crypto.randomUUID(),
-  createdAt = new Date().toISOString(),
+  id: string = crypto.randomUUID(),
+  createdAt: string = new Date().toISOString(),
 ): DealerTip {
   if (!game.dealer.enabled) throw new Error('Aucun dealer n’est configuré pour cette partie');
   if (game.status !== 'CLOSED') throw new Error('Les tips dealer sont enregistrés après la clôture de la partie');
