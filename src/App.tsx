@@ -27,6 +27,8 @@ import {
   markContributionPending,
 } from './game';
 import { appendLedgerEvent, verifyLedger } from './ledger';
+import LightningDestinationField from './LightningDestinationField';
+import { normalizeReusableLightningDestination } from './lightningDestination';
 import LightningInvoiceCard from './LightningInvoiceCard';
 import ManualLightningPayoutCard from './ManualLightningPayoutCard';
 import { MockLightningAdapter, type LightningInvoice } from './lightning';
@@ -254,6 +256,9 @@ export default function App() {
     if (dealerEnabled && dealerPayment === 'LIGHTNING' && !dealerLightningAddress.trim()) throw new Error('La destination Lightning du dealer est requise');
     if (startupDonationSats < 0 || !Number.isInteger(startupDonationSats)) throw new Error('Le don de démarrage doit être un nombre entier de sats');
 
+    const normalizedDealerDestination = dealerEnabled && dealerPayment === 'LIGHTNING'
+      ? normalizeReusableLightningDestination(dealerLightningAddress)
+      : undefined;
     const createdAt = new Date().toISOString();
     const created: Game = {
       id: crypto.randomUUID(),
@@ -269,7 +274,7 @@ export default function App() {
         value: dealerMode === 'NONE' ? undefined : dealerValue,
         label: dealerLabel.trim() || 'Dealer',
         preferredPayment: dealerPayment,
-        lightningAddress: dealerLightningAddress.trim() || undefined,
+        lightningAddress: normalizedDealerDestination,
       } : { enabled: false, mode: 'NONE' },
       lockedBtcFiatRate: currency === 'SATS' ? undefined : btcFiatRate,
       createdAt,
@@ -293,11 +298,14 @@ export default function App() {
     if (players.some((player) => player.nickname.toLocaleLowerCase() === cleanNickname.toLocaleLowerCase())) throw new Error('Ce pseudo est déjà utilisé');
     if (preferredPayment === 'LIGHTNING' && !lightningAddress.trim()) throw new Error('Une destination Lightning est requise pour un joueur Lightning');
 
+    const normalizedLightningDestination = lightningAddress.trim()
+      ? normalizeReusableLightningDestination(lightningAddress)
+      : undefined;
     const player: Player = {
       id: crypto.randomUUID(),
       nickname: cleanNickname,
       preferredPayment,
-      lightningAddress: lightningAddress.trim() || undefined,
+      lightningAddress: normalizedLightningDestination,
     };
     setPlayers((current) => [...current, player]);
     setStacks((current) => ({ ...current, [player.id]: 0 }));
@@ -415,7 +423,10 @@ export default function App() {
   }
 
   function choosePayoutMethod(player: Player, method: PaymentMethod) {
-    if (method === 'LIGHTNING' && !player.lightningAddress) throw new Error(`Ajoute une destination Lightning pour ${player.nickname} avant de choisir ce mode`);
+    if (method === 'LIGHTNING') {
+      if (!player.lightningAddress) throw new Error(`Ajoute une destination Lightning pour ${player.nickname} avant de choisir ce mode`);
+      normalizeReusableLightningDestination(player.lightningAddress);
+    }
     setPayouts((current) => current.map((payout) => payout.playerId === player.id && payout.status === 'PENDING' ? { ...payout, method } : payout));
   }
 
@@ -430,6 +441,7 @@ export default function App() {
     let sats: number | undefined;
     if (payout.method === 'LIGHTNING') {
       if (!player.lightningAddress) throw new Error(`Destination Lightning manquante pour ${player.nickname}`);
+      normalizeReusableLightningDestination(player.lightningAddress);
       sats = toSats(payout.amount, game);
       if (sats <= 0) throw new Error('Le paiement Lightning converti vaut 0 sat');
     }
@@ -452,6 +464,7 @@ export default function App() {
     let sats: number | undefined;
     if (method === 'LIGHTNING') {
       if (!game.dealer.lightningAddress) throw new Error('Destination Lightning du dealer manquante');
+      normalizeReusableLightningDestination(game.dealer.lightningAddress);
       sats = toSats(settlement.dealerCompensation, game);
       if (sats <= 0) throw new Error('La rémunération Lightning du dealer vaut 0 sat');
     }
@@ -479,6 +492,10 @@ export default function App() {
     if (dealerTips.some((tip) => tip.playerId === player.id)) throw new Error(`${player.nickname} a déjà un tip dealer enregistré`);
     const amount = dealerTipAmounts[player.id] ?? 0;
     const method = dealerTipMethods[player.id] ?? (game.dealer.preferredPayment === 'LIGHTNING' ? 'LIGHTNING' : 'CASH');
+    if (method === 'LIGHTNING') {
+      if (!game.dealer.lightningAddress) throw new Error('Destination Lightning du dealer manquante');
+      normalizeReusableLightningDestination(game.dealer.lightningAddress);
+    }
     const tip = createDealerTip(game, player.id, amount, method);
     setDealerTips((current) => [...current, tip]);
     await record(game.id, 'DEALER_TIP_RECORDED', {
@@ -648,7 +665,12 @@ export default function App() {
                   <option value="CASH">Espèces</option><option value="LIGHTNING">Lightning</option>
                 </select>
               </label>
-              {dealerPayment === 'LIGHTNING' && <label>Destination Lightning dealer<input value={dealerLightningAddress} onChange={(event) => setDealerLightningAddress(event.target.value)} placeholder="dealer@wallet.example" /><small>Le scan QR/BOLT12 arrive dans le prochain lot.</small></label>}
+              {dealerPayment === 'LIGHTNING' && <LightningDestinationField
+                label="Destination Lightning dealer"
+                value={dealerLightningAddress}
+                onChange={setDealerLightningAddress}
+                compactHint="Adresse user@domain, offre BOLT12 (Phoenix) ou LNURL. Le QR peut être scanné directement avec la caméra."
+              />}
               {dealerMode === 'NONE' && <p className="muted dealer-mode-note">Aucune somme ne sera retirée du pot. Après clôture, chaque joueur pourra enregistrer un tip volontaire séparé.</p>}
             </>}
           </div>
@@ -681,7 +703,13 @@ export default function App() {
                   <option value="CASH">Espèces</option><option value="LIGHTNING">Lightning</option><option value="ANY">À choisir à la fin</option>
                 </select>
               </label>
-              {(preferredPayment === 'LIGHTNING' || preferredPayment === 'ANY') && <label>Lightning Address (facultatif si choix final en espèces)<input value={lightningAddress} onChange={(event) => setLightningAddress(event.target.value)} placeholder="alice@wallet.example" /></label>}
+              {(preferredPayment === 'LIGHTNING' || preferredPayment === 'ANY') && <LightningDestinationField
+                label="Destination Lightning"
+                value={lightningAddress}
+                onChange={setLightningAddress}
+                optional={preferredPayment === 'ANY'}
+                compactHint="Tu peux saisir une adresse @, scanner un QR Phoenix/BOLT12 ou utiliser un LNURL réutilisable."
+              />}
             </div>
             <button className="wide-mobile" onClick={() => void execute(addPlayer)}>Ajouter</button>
           </section>
@@ -742,7 +770,7 @@ export default function App() {
                   <strong>Comment veux-tu régler {player.nickname} ?</strong>
                   <div className="actions">
                     <button onClick={() => void execute(() => choosePayoutMethod(player, 'CASH'))}>Espèces</button>
-                    <button disabled={!player.lightningAddress} onClick={() => void execute(() => choosePayoutMethod(player, 'LIGHTNING'))}>Lightning{!player.lightningAddress ? ' · adresse manquante' : ''}</button>
+                    <button disabled={!player.lightningAddress} onClick={() => void execute(() => choosePayoutMethod(player, 'LIGHTNING'))}>Lightning{!player.lightningAddress ? ' · destination manquante' : ''}</button>
                   </div>
                 </div>}
                 {game.status !== 'CLOSED' && payout.status !== 'CONFIRMED' && payout.method === 'CASH' && <button onClick={() => void execute(() => confirmPlayerPayout(payout))}>Confirmer remise espèces</button>}
@@ -822,7 +850,13 @@ export default function App() {
             ? 'Partie réelle active, wallet déconnecté : aucune nouvelle cave NWC ne sera créée tant que le wallet receive-only n’est pas reconnecté. Aucun fallback mock.'
             : nwcMode === 'DIAGNOSTIC'
               ? 'Wallet connecté en diagnostic seulement. Les caves de partie restent mock jusqu’à armement explicite.'
-              : 'Mode mock : aucune cave Lightning réelle. Connecte puis arme explicitement un wallet receive-only pour une partie réelle.'}</p></div>
+              : 'Mode mock : aucune cave Lightning réelle. Connecte puis arme explicitement un wallet receive-only pour une partie réelle.'}
+          </p>
+          <details className="wallet-help">
+            <summary>À quoi sert NWC ? Et si j’utilise Phoenix ?</summary>
+            <p>NWC sert à relier NOIOU au wallet de l’organisateur pour créer et vérifier automatiquement les invoices entrantes, sans donner de permission de dépense. Phoenix mobile peut déjà être utilisé comme destination de règlement grâce à son QR/offre BOLT12 : scanne le QR dans la fiche joueur ou dealer. La réception automatisée de caves reste, dans cette alpha, réservée à un wallet qui fournit une connexion NWC.</p>
+          </details>
+        </div>
         <span className={`state ${nwcMode === 'LIVE_ARMED' ? 'paid' : 'pending'}`}>{nwcMode === 'LIVE_ARMED' ? 'RÉEL ARMÉ' : nwcMode === 'RECONNECT_REQUIRED' ? 'RECONNECTER' : nwcMode === 'DIAGNOSTIC' ? 'DIAGNOSTIC' : 'MOCK'}</span>
       </section>
 
