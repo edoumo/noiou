@@ -1,6 +1,7 @@
 import { useMemo, useState } from 'react';
 import { parseLightningDestination } from './lightningDestination';
 import QrCameraScanner from './QrCameraScanner';
+import './lightningDestination.css';
 
 interface Props {
   label: string;
