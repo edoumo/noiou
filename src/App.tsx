@@ -110,7 +110,7 @@ export default function App() {
 
   const [themePreference, setThemePreference] = useState<ThemePreference>(() => readThemePreference());
   const [currency, setCurrency] = useState<Currency>(initialSession?.game?.currency ?? 'EUR');
-  const [buyIn, setBuyIn] = useState(initialSession?.game?.buyInAmount ?? 20);
+  const [buyIn, setBuyIn] = useState(initialSession?.game?.buyInAmount ?? 10);
   const [chipValue, setChipValue] = useState(initialSession?.game?.chipValue ?? 1);
   const [btcFiatRate, setBtcFiatRate] = useState(initialSession?.game?.lockedBtcFiatRate ?? 100_000);
   const [lightningReceiveMode, setLightningReceiveMode] = useState<LightningReceiveMode>(initialSession?.game?.lightningReceiveMode ?? 'MOCK');
