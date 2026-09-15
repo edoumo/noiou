@@ -10,6 +10,8 @@ export interface PartyInvite {
   gameId: string;
   currency: Currency;
   buyInAmount: number;
+  /** Optional keeps QR invites created before UX19 readable. */
+  chipsPerBuyIn?: number;
   createdAt: string;
 }
 
@@ -52,10 +54,17 @@ function validPayment(value: unknown): value is PaymentMethod | 'ANY' {
   return value === 'CASH' || value === 'LIGHTNING' || value === 'ANY';
 }
 
-export function createPartyInvite(gameId: string, currency: Currency, buyInAmount: number, createdAt = new Date().toISOString()): PartyInvite {
+export function createPartyInvite(
+  gameId: string,
+  currency: Currency,
+  buyInAmount: number,
+  createdAt = new Date().toISOString(),
+  chipsPerBuyIn?: number,
+): PartyInvite {
   if (!gameId.trim()) throw new Error('Identifiant de partie manquant');
   if (!Number.isFinite(buyInAmount) || buyInAmount <= 0) throw new Error('Cave invalide');
-  return { v: PARTY_JOIN_VERSION, type: 'PARTY_INVITE', gameId, currency, buyInAmount, createdAt };
+  if (chipsPerBuyIn !== undefined && (!Number.isInteger(chipsPerBuyIn) || chipsPerBuyIn <= 0)) throw new Error('Nombre de jetons par cave invalide');
+  return { v: PARTY_JOIN_VERSION, type: 'PARTY_INVITE', gameId, currency, buyInAmount, chipsPerBuyIn, createdAt };
 }
 
 export function buildPartyInviteUrl(origin: string, invite: PartyInvite): string {
@@ -77,7 +86,8 @@ export function parsePartyInvite(input: string): PartyInvite {
   }
   if (!encoded) throw new Error('QR de partie invalide');
   const invite = decodeOrThrow<Partial<PartyInvite>>(encoded, 'QR de partie invalide');
-  if (invite.v !== PARTY_JOIN_VERSION || invite.type !== 'PARTY_INVITE' || typeof invite.gameId !== 'string' || !invite.gameId.trim() || !validCurrency(invite.currency) || typeof invite.buyInAmount !== 'number' || !Number.isFinite(invite.buyInAmount) || invite.buyInAmount <= 0 || typeof invite.createdAt !== 'string') {
+  const validChips = invite.chipsPerBuyIn === undefined || (Number.isInteger(invite.chipsPerBuyIn) && (invite.chipsPerBuyIn ?? 0) > 0);
+  if (invite.v !== PARTY_JOIN_VERSION || invite.type !== 'PARTY_INVITE' || typeof invite.gameId !== 'string' || !invite.gameId.trim() || !validCurrency(invite.currency) || typeof invite.buyInAmount !== 'number' || !Number.isFinite(invite.buyInAmount) || invite.buyInAmount <= 0 || !validChips || typeof invite.createdAt !== 'string') {
     throw new Error('QR de partie invalide');
   }
   return invite as PartyInvite;

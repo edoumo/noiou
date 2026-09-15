@@ -1,6 +1,6 @@
 import { describe, expect, it } from 'vitest';
 import type { Contribution, Game, Player } from './domain';
-import { calculateSettlement, computeDealerCompensation } from './settlement';
+import { calculateIssuedChips, calculateSettlement, computeDealerCompensation } from './settlement';
 
 const players: Player[] = [
   { id: 'a', nickname: 'Alice', preferredPayment: 'CASH' },
@@ -10,7 +10,7 @@ const players: Player[] = [
 function game(overrides: Partial<Game> = {}): Game {
   return {
     id: 'g1', currency: 'EUR', buyInAmount: 20, rebuyEnabled: true, rebuyAmount: 20,
-    chipValue: 1, status: 'SETTLING', dealer: { enabled: false, mode: 'NONE' },
+    chipsPerBuyIn: 20, chipValue: 1, status: 'SETTLING', dealer: { enabled: false, mode: 'NONE' },
     createdAt: '2026-09-13T00:00:00Z', ...overrides,
   };
 }
@@ -34,7 +34,7 @@ describe('settlement', () => {
     expect(result.chipDifference).toBe(1);
   });
 
-  it('includes paid rebuys in issued value', () => {
+  it('includes paid rebuys in issued chips without deriving them from money', () => {
     const result = calculateSettlement(game(), players, [paid('1','a'), paid('2','b'), paid('3','b',20,'REBUY')], [{ playerId:'a', chips:20 }, { playerId:'b', chips:40 }]);
     expect(result.balanced).toBe(true);
     expect(result.issuedChips).toBe(60);
@@ -45,6 +45,16 @@ describe('settlement', () => {
     const result = calculateSettlement(game(), players, [paid('1','a'), pending], [{ playerId:'a', chips:20 }, { playerId:'b', chips:0 }]);
     expect(result.issuedChips).toBe(20);
     expect(result.balanced).toBe(true);
+  });
+
+  it('keeps sats and physical chips as separate quantities', () => {
+    const satsGame = game({ currency:'SATS', buyInAmount:100, rebuyAmount:100, chipsPerBuyIn:10, chipValue:10 });
+    const contributions = [paid('1','a',100), paid('2','b',100)];
+    expect(calculateIssuedChips(satsGame, contributions)).toBe(20);
+    const result = calculateSettlement(satsGame, players, contributions, [{ playerId:'a', chips:0 }, { playerId:'b', chips:20 }]);
+    expect(result.balanced).toBe(true);
+    expect(result.issuedChips).toBe(20);
+    expect(result.payouts.map((payout) => payout.amount)).toEqual([0, 200]);
   });
 
   it('computes dealer fixed and percent compensation explicitly', () => {
@@ -59,11 +69,22 @@ describe('settlement', () => {
     expect(result.payouts.reduce((sum,payout)=>sum+payout.amount,0)).toBe(36);
   });
 
-  it('rounds SATS as integer amounts and preserves conservation', () => {
-    const satsGame = game({ currency:'SATS', buyInAmount:1001, rebuyAmount:1001, chipValue:1 });
-    const result = calculateSettlement(satsGame, players, [paid('1','a',1001), paid('2','b',1001)], [{ playerId:'a', chips:1000 }, { playerId:'b', chips:1002 }]);
+  it('rounds SATS payouts as integer amounts and preserves conservation', () => {
+    const satsGame = game({ currency:'SATS', buyInAmount:1001, rebuyAmount:1001, chipsPerBuyIn:20, chipValue:50.05 });
+    const result = calculateSettlement(satsGame, players, [paid('1','a',1001), paid('2','b',1001)], [{ playerId:'a', chips:19 }, { playerId:'b', chips:21 }]);
     expect(result.payouts.every((payout) => Number.isInteger(payout.amount))).toBe(true);
     expect(result.payouts.reduce((sum,payout)=>sum+payout.amount,0) + result.dealerCompensation).toBe(2002);
+  });
+
+  it('keeps legacy schema-v1 sessions working when chipsPerBuyIn is absent', () => {
+    const legacy = game({ chipsPerBuyIn: undefined, chipValue: 1 });
+    const result = calculateSettlement(legacy, players, [paid('1','a'), paid('2','b')], [{ playerId:'a', chips:20 }, { playerId:'b', chips:20 }]);
+    expect(result.balanced).toBe(true);
+    expect(result.issuedChips).toBe(40);
+  });
+
+  it('rejects a paid contribution that does not match the configured cave amount', () => {
+    expect(() => calculateIssuedChips(game(), [paid('1','a',19)])).toThrow(/configured buy-in/);
   });
 
   it('rejects negative or fractional physical chip counts', () => {

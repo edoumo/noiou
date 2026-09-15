@@ -57,7 +57,17 @@ export default function PartyJoinControl() {
       if (typeof window === 'undefined') return;
       const snapshot = loadSession(window.localStorage);
       if (!snapshot?.game || snapshot.game.status !== 'OPEN') throw new Error('Démarre une partie avant d’afficher son QR d’invitation.');
-      const nextInvite = createPartyInvite(snapshot.game.id, snapshot.game.currency, snapshot.game.buyInAmount, snapshot.game.createdAt);
+      const chipsPerBuyIn = snapshot.game.chipsPerBuyIn ?? (() => {
+        const legacy = snapshot.game.buyInAmount / snapshot.game.chipValue;
+        return Number.isInteger(legacy) && legacy > 0 ? legacy : undefined;
+      })();
+      const nextInvite = createPartyInvite(
+        snapshot.game.id,
+        snapshot.game.currency,
+        snapshot.game.buyInAmount,
+        snapshot.game.createdAt,
+        chipsPerBuyIn,
+      );
       setInvite(nextInvite);
       setInviteUrl(buildPartyInviteUrl(window.location.origin, nextInvite));
       setMode('ORGANIZER');
@@ -155,6 +165,9 @@ export default function PartyJoinControl() {
   }
 
   const paymentNeedsDestination = preferredPayment === 'LIGHTNING' || preferredPayment === 'ANY';
+  const inviteTerms = invite
+    ? `${invite.currency} · cave ${invite.buyInAmount.toLocaleString('fr-FR')}${invite.chipsPerBuyIn ? ` · ${invite.chipsPerBuyIn.toLocaleString('fr-FR')} jetons` : ''}`
+    : '';
 
   return (
     <>
@@ -173,9 +186,9 @@ export default function PartyJoinControl() {
           {error && <div className="alert" role="alert">{error}</div>}
 
           {mode === 'ORGANIZER' && inviteUrl && <>
-            <p>Fais scanner ce QR par le téléphone du joueur. Il renseigne lui-même son pseudo et, s’il le souhaite, sa destination Lightning.</p>
+            <p>Fais scanner ce QR par le téléphone du joueur. Il voit les conditions de la cave, renseigne lui-même son pseudo et, s’il le souhaite, sa destination Lightning.</p>
             <div className="party-join-qr"><QRCodeSVG value={inviteUrl} size={240} level="M" marginSize={2} /></div>
-            <small className="party-join-summary">{invite?.currency} · cave {invite?.buyInAmount.toLocaleString('fr-FR')}</small>
+            <small className="party-join-summary">{inviteTerms}</small>
             <div className="party-join-actions">
               <button type="button" onClick={() => setMode('SCAN_RESPONSE')}>📷 Scanner la réponse d’un joueur</button>
               <button type="button" onClick={() => responseImageRef.current?.click()}>🖼️ Réponse depuis Photos</button>
@@ -207,7 +220,8 @@ export default function PartyJoinControl() {
           </>}
 
           {mode === 'PARTICIPANT' && invite && <>
-            <div className="party-join-game"><strong>Partie trouvée</strong><span>{invite.currency} · cave {invite.buyInAmount.toLocaleString('fr-FR')}</span></div>
+            <div className="party-join-game"><strong>Partie trouvée</strong><span>{inviteTerms}</span></div>
+            <p className="muted">Vérifie ces conditions avant de rejoindre : le montant de la cave et le nombre de jetons remis viennent du QR de la partie.</p>
             <label>Pseudo<input value={nickname} onChange={(event) => setNickname(event.target.value)} placeholder="Alice" /></label>
             <label>Règlement préféré
               <select value={preferredPayment} onChange={(event) => setPreferredPayment(event.target.value as PaymentMethod | 'ANY')}>

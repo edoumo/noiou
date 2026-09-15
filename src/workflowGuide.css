@@ -1,0 +1,54 @@
+.workflow-guide {
+  position: sticky;
+  top: 0.75rem;
+  z-index: 20;
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 1rem;
+  margin: 0.9rem 0 1rem;
+  padding: 0.9rem 1rem;
+  border: 2px solid var(--line, #d9d9d9);
+  border-radius: 14px;
+  background: var(--surface, #fff);
+  box-shadow: 0 8px 24px rgba(0, 0, 0, 0.08);
+}
+
+.workflow-guide > div {
+  display: grid;
+  gap: 0.22rem;
+  min-width: 0;
+}
+
+.workflow-guide small {
+  font-weight: 700;
+  text-transform: uppercase;
+  letter-spacing: 0.04em;
+}
+
+.workflow-guide strong {
+  font-size: 1.05rem;
+}
+
+.workflow-guide span {
+  opacity: 0.78;
+}
+
+.workflow-guide button {
+  flex: 0 0 auto;
+}
+
+.workflow-guide.ready {
+  border-style: solid;
+}
+
+@media (max-width: 640px) {
+  .workflow-guide {
+    top: 0.35rem;
+    display: grid;
+  }
+
+  .workflow-guide button {
+    width: 100%;
+  }
+}

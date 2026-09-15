@@ -6,6 +6,12 @@ export interface LightningInvoice {
   sats: number;
   status: 'PENDING' | 'PAID' | 'EXPIRED';
   source?: LightningInvoiceSource;
+  /** Human-readable NOIOU trace shown next to the QR, never a wallet secret. */
+  traceLabel?: string;
+  /** Why automatic exact-invoice preparation could not be completed. */
+  preparationError?: string;
+  /** How an exact request was obtained. */
+  preparedBy?: 'NWC' | 'LNURL_PAY' | 'MANUAL_BOLT11' | 'MOCK';
 }
 
 export interface PreparedLightningPayment {
@@ -45,6 +51,8 @@ export class MockLightningAdapter implements LightningAdapter {
       sats,
       status: 'PENDING',
       source: 'MOCK',
+      traceLabel: memo,
+      preparedBy: 'MOCK',
     };
     this.invoices.set(id, invoice);
     return invoice;
