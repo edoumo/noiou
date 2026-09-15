@@ -8,10 +8,16 @@ export function shortGameReference(gameId: string): string {
   return gameId.replace(/-/g, '').slice(0, 8).toUpperCase();
 }
 
+function cleanLabel(value: string): string {
+  return value.replace(/\s+/g, ' ').trim().slice(0, 32);
+}
+
+export function buildTraceLabel(gameId: string, nickname: string, action: string): string {
+  return `NOIOU ${shortGameReference(gameId)} · ${cleanLabel(nickname)} · ${cleanLabel(action)}`;
+}
+
 export function buildPaymentTrace(gameId: string, nickname: string, kind: ContributionKind, ordinal = 1): string {
-  const action = kind === 'BUYIN' ? 'Cave' : `Rebuy ${ordinal}`;
-  const cleanNickname = nickname.replace(/\s+/g, ' ').trim().slice(0, 32);
-  return `NOIOU ${shortGameReference(gameId)} · ${cleanNickname} · ${action}`;
+  return buildTraceLabel(gameId, nickname, kind === 'BUYIN' ? 'Cave' : `Rebuy ${ordinal}`);
 }
 
 export async function prepareExternalIncomingRequest(
