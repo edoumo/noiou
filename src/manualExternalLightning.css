@@ -7,7 +7,6 @@
 }
 
 .manual-receipt-head,
-.manual-request-grid,
 .manual-bolt11-actions {
   display: flex;
   gap: 0.8rem;
@@ -21,10 +20,13 @@
 }
 
 .manual-receipt-head > div,
-.manual-request-copy,
-.manual-bolt11-entry {
+.manual-bolt11-entry,
+.manual-preparation-warning,
+.invoice-rejected,
+.receipt-confirmation-step,
+.official-payment {
   display: grid;
-  gap: 0.35rem;
+  gap: 0.45rem;
 }
 
 .manual-badge {
@@ -35,18 +37,54 @@
   border: 1px solid currentColor;
 }
 
-.manual-request-grid {
-  align-items: flex-start;
+.manual-badge.verified {
+  font-weight: 800;
 }
 
-.manual-request-copy {
-  flex: 1 1 260px;
-  min-width: 0;
+.manual-preparation-warning,
+.invoice-rejected {
+  margin: 0.75rem 0;
+  padding: 0.75rem;
+  border-radius: 10px;
+  border: 1px solid var(--line, #d9d9d9);
 }
 
-.manual-request-copy code {
-  overflow-wrap: anywhere;
-  word-break: break-word;
+.invoice-rejected {
+  border-width: 2px;
+}
+
+.official-payment {
+  justify-items: center;
+  text-align: center;
+  padding: 1rem;
+  border: 2px solid var(--line, #d9d9d9);
+  border-radius: 14px;
+  background: var(--surface, rgba(127, 127, 127, 0.04));
+}
+
+.official-payment-title {
+  display: grid;
+  gap: 0.25rem;
+  justify-items: center;
+}
+
+.official-payment-title strong {
+  font-size: clamp(1.7rem, 7vw, 2.8rem);
+}
+
+.payment-trace {
+  font-weight: 700;
+}
+
+.invoice-qr {
+  max-width: 100%;
+  overflow: hidden;
+}
+
+.invoice-qr svg {
+  display: block;
+  width: min(220px, 72vw);
+  height: auto;
 }
 
 .manual-bolt11-entry {
@@ -58,11 +96,17 @@
   min-width: 0;
 }
 
+.receipt-confirmation-step {
+  margin-top: 1rem;
+  padding-top: 1rem;
+  border-top: 1px solid var(--line, #d9d9d9);
+}
+
 .manual-confirm-check {
   display: flex;
   align-items: flex-start;
   gap: 0.55rem;
-  margin: 1rem 0 0.7rem;
+  margin: 0.4rem 0 0.7rem;
 }
 
 .manual-confirm-check input {
@@ -70,18 +114,13 @@
 }
 
 @media (max-width: 560px) {
-  .manual-request-grid {
-    display: grid;
-    justify-items: center;
-  }
-
-  .manual-request-copy {
-    width: 100%;
-  }
-
   .manual-bolt11-actions {
     display: grid;
     grid-template-columns: 1fr;
     width: 100%;
+  }
+
+  .official-payment {
+    padding: 0.8rem;
   }
 }
