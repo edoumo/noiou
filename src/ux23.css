@@ -1,0 +1,40 @@
+.organizer-player-note,
+.lobby-note {
+  display: grid;
+  gap: 4px;
+  padding: 10px 12px;
+  border: 1px solid var(--border, rgba(127, 127, 127, .28));
+  border-radius: 12px;
+}
+
+.organizer-player-note strong,
+.lobby-note strong {
+  font-size: .95rem;
+}
+
+.organizer-allocation-button {
+  font-weight: 800;
+}
+
+.organizer-retention {
+  display: grid;
+  gap: 8px;
+  padding: 12px;
+  border: 1px solid var(--border, rgba(127, 127, 127, .28));
+  border-radius: 12px;
+}
+
+.organizer-retention button {
+  width: 100%;
+}
+
+.player-heading .organizer-badge {
+  display: inline-flex;
+  width: fit-content;
+  margin-top: 3px;
+  font-size: .72rem;
+  font-weight: 800;
+  text-transform: uppercase;
+  letter-spacing: .04em;
+  opacity: .78;
+}
