@@ -25,24 +25,50 @@ function validateFinalStacks(finalStacks: FinalStack[]): void {
   }
 }
 
+function paidContributionsForGame(game: Game, contributions: Contribution[]): Contribution[] {
+  const paid = contributions.filter((contribution) => contribution.gameId === game.id && contribution.status === 'PAID');
+  for (const contribution of paid) {
+    if (!Number.isFinite(contribution.amount) || contribution.amount <= 0) throw new Error('Paid contribution amount must be positive');
+  }
+  return paid;
+}
+
+/**
+ * Returns the physical/table chip units that should exist for the paid contributions.
+ * New games use chipsPerBuyIn and therefore never infer chip quantity from sats/euros/dollars.
+ * The legacy chipValue calculation is retained only for old schema-v1 sessions/backups.
+ */
+export function calculateIssuedChips(game: Game, contributions: Contribution[]): number {
+  const paid = paidContributionsForGame(game, contributions);
+  if (game.chipsPerBuyIn !== undefined) {
+    if (!Number.isInteger(game.chipsPerBuyIn) || game.chipsPerBuyIn <= 0) throw new Error('Chips per buy-in must be a positive integer');
+    for (const contribution of paid) {
+      const expectedAmount = contribution.kind === 'REBUY' ? (game.rebuyAmount ?? game.buyInAmount) : game.buyInAmount;
+      if (roundAmount(contribution.amount, game.currency) !== roundAmount(expectedAmount, game.currency)) {
+        throw new Error('Paid contribution amount does not match the configured buy-in/rebuy amount');
+      }
+    }
+    return paid.length * game.chipsPerBuyIn;
+  }
+
+  if (!Number.isFinite(game.chipValue) || game.chipValue <= 0) throw new Error('Chip value must be positive');
+  const totalPaid = roundAmount(paid.reduce((sum, contribution) => sum + contribution.amount, 0), game.currency);
+  const rawIssuedChips = totalPaid / game.chipValue;
+  if (!Number.isInteger(rawIssuedChips)) throw new Error('Paid value cannot be represented by an integer chip count');
+  return rawIssuedChips;
+}
+
 export function calculateSettlement(
   game: Game,
   players: Player[],
   contributions: Contribution[],
   finalStacks: FinalStack[],
 ): SettlementResult {
-  if (!Number.isFinite(game.chipValue) || game.chipValue <= 0) throw new Error('Chip value must be positive');
   validateFinalStacks(finalStacks);
 
-  const paid = contributions.filter((contribution) => contribution.gameId === game.id && contribution.status === 'PAID');
-  for (const contribution of paid) {
-    if (!Number.isFinite(contribution.amount) || contribution.amount <= 0) throw new Error('Paid contribution amount must be positive');
-  }
-
+  const paid = paidContributionsForGame(game, contributions);
   const totalPaid = roundAmount(paid.reduce((sum, contribution) => sum + contribution.amount, 0), game.currency);
-  const rawIssuedChips = totalPaid / game.chipValue;
-  if (!Number.isInteger(rawIssuedChips)) throw new Error('Paid value cannot be represented by an integer chip count');
-  const issuedChips = rawIssuedChips;
+  const issuedChips = calculateIssuedChips(game, contributions);
   const countedChips = finalStacks.reduce((sum, stack) => sum + stack.chips, 0);
   const chipDifference = countedChips - issuedChips;
 
@@ -62,16 +88,17 @@ export function calculateSettlement(
   const distributableAmount = roundAmount(totalPaid - dealerCompensation, game.currency);
   if (distributableAmount < 0) throw new Error('Dealer compensation exceeds available funds');
 
-  const totalStackValue = roundAmount(countedChips * game.chipValue, game.currency);
-  const tolerance = game.currency === 'SATS' ? 0 : 0.01;
-  if (Math.abs(totalStackValue - totalPaid) > tolerance) throw new Error('Chip value invariant violated');
+  if (game.chipsPerBuyIn === undefined) {
+    const totalStackValue = roundAmount(countedChips * game.chipValue, game.currency);
+    const tolerance = game.currency === 'SATS' ? 0 : 0.01;
+    if (Math.abs(totalStackValue - totalPaid) > tolerance) throw new Error('Chip value invariant violated');
+  }
 
   const playerMap = new Map(players.map((player) => [player.id, player]));
   const rawPayouts = finalStacks.map((stack) => {
     const player = playerMap.get(stack.playerId);
     if (!player) throw new Error(`Unknown player ${stack.playerId}`);
-    const gross = stack.chips * game.chipValue;
-    const ratio = totalPaid === 0 ? 0 : gross / totalPaid;
+    const ratio = countedChips === 0 ? 0 : stack.chips / countedChips;
     return {
       playerId: stack.playerId,
       amount: roundAmount(distributableAmount * ratio, game.currency),
