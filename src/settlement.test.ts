@@ -27,6 +27,11 @@ describe('settlement', () => {
     expect(result.payouts.map(p => p.amount)).toEqual([30,10]);
   });
 
+  it('does not bind payout method to the payment method of the first cave', () => {
+    const result = calculateSettlement(game(), players, [paid('1','a'), paid('2','b')], [{ playerId:'a', chips:20 }, { playerId:'b', chips:20 }]);
+    expect(result.payouts.map((payout) => payout.method)).toEqual(['ANY', 'ANY']);
+  });
+
   it('blocks settlement when final chips do not equal issued chips', () => {
     const result = calculateSettlement(game(), players, [paid('1','a'), paid('2','b')], [{ playerId:'a', chips:31 }, { playerId:'b', chips:10 }]);
     expect(result.balanced).toBe(false);
