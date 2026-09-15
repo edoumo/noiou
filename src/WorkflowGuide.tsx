@@ -1,4 +1,5 @@
 import type { Contribution, Game, Payout, Player, SettlementResult } from './domain';
+import { isPlayStarted, lobbyReadiness, MIN_POKER_PLAYERS } from './lobby';
 import './workflowGuide.css';
 
 interface Props {
@@ -8,6 +9,7 @@ interface Props {
   settlement: SettlementResult | null;
   payouts: Payout[];
   dealerPaid: boolean;
+  onStartGame?: () => void;
 }
 
 function formatAmount(amount: number, game: Game): string {
@@ -24,7 +26,7 @@ function Guide({ children, ready = false }: { children: React.ReactNode; ready?:
   return <aside id="workflow-guide" className={`workflow-guide${ready ? ' ready' : ''}`} aria-live="polite">{children}</aside>;
 }
 
-export default function WorkflowGuide({ game, players, contributions, settlement, payouts, dealerPaid }: Props) {
+export default function WorkflowGuide({ game, players, contributions, settlement, payouts, dealerPaid, onStartGame }: Props) {
   const paidBuyIns = players.filter((player) => contributions.some((item) => item.playerId === player.id && item.kind === 'BUYIN' && item.status === 'PAID'));
   const pendingContribution = contributions.find((item) => item.status === 'CREATED' || item.status === 'PENDING');
   const pendingContributionPlayer = pendingContribution ? players.find((player) => player.id === pendingContribution.playerId) : undefined;
@@ -32,24 +34,47 @@ export default function WorkflowGuide({ game, players, contributions, settlement
   const pendingPayout = payouts.find((payout) => payout.amount > 0 && payout.status !== 'CONFIRMED');
   const pendingPayoutPlayer = pendingPayout ? players.find((player) => player.id === pendingPayout.playerId) : undefined;
 
-  if (game.status === 'OPEN') {
-    if (players.length === 0) return <Guide>
-      <div><small>Prochaine action</small><strong>Ajoute le premier joueur</strong><span>NOIOU te guidera ensuite cave par cave.</span></div>
+  if (game.status === 'OPEN' && !isPlayStarted(game)) {
+    const readiness = lobbyReadiness(players, contributions);
+
+    if (players.length < MIN_POKER_PLAYERS) return <Guide>
+      <div>
+        <small>Préparation · {players.length}/{MIN_POKER_PLAYERS} joueurs minimum</small>
+        <strong>{players.length === 0 ? 'Ajoute le premier joueur' : 'Ajoute au moins un deuxième joueur'}</strong>
+        <span>La partie ne peut pas démarrer avec un seul joueur. Les caves déjà préparées restent enregistrées.</span>
+      </div>
       <button onClick={() => goTo('add-player')}>Ajouter un joueur</button>
     </Guide>;
 
+    if (pendingContribution && pendingContributionPlayer) return <Guide>
+      <div><small>Préparation · paiement en attente</small><strong>Finaliser {pendingContributionPlayer.nickname} · {formatAmount(pendingContribution.amount, game)}</strong><span>{pendingContribution.method === 'LIGHTNING' ? 'Présente la demande exacte, puis confirme uniquement après le paiement.' : 'Confirme uniquement après réception réelle des espèces.'}</span></div>
+      <button onClick={() => goTo(`player-${pendingContributionPlayer.id}`)}>Revenir à {pendingContributionPlayer.nickname}</button>
+    </Guide>;
+
+    if (nextUnpaid) return <Guide>
+      <div><small>Préparation · caves {paidBuyIns.length}/{players.length}</small><strong>Encaisser {nextUnpaid.nickname} · {formatAmount(game.buyInAmount, game)}</strong><span>Toutes les caves initiales doivent être comptabilisées avant de démarrer la partie.</span></div>
+      <button onClick={() => goTo(`player-${nextUnpaid.id}`)}>Encaisser {nextUnpaid.nickname}</button>
+    </Guide>;
+
+    if (readiness.canStart) return <Guide ready>
+      <div><small>Préparation terminée</small><strong>✓ {players.length} joueurs prêts</strong><span>Toutes les caves initiales sont encaissées. Le poker peut maintenant commencer.</span></div>
+      <button onClick={onStartGame}>Démarrer la partie</button>
+    </Guide>;
+  }
+
+  if (game.status === 'OPEN') {
     if (pendingContribution && pendingContributionPlayer) return <Guide>
       <div><small>Paiement en attente</small><strong>Finaliser {pendingContributionPlayer.nickname} · {formatAmount(pendingContribution.amount, game)}</strong><span>{pendingContribution.method === 'LIGHTNING' ? 'Présente le QR exact, puis confirme uniquement après le paiement.' : 'Confirme uniquement après réception réelle des espèces.'}</span></div>
       <button onClick={() => goTo(`player-${pendingContributionPlayer.id}`)}>Revenir à {pendingContributionPlayer.nickname}</button>
     </Guide>;
 
     if (nextUnpaid) return <Guide>
-      <div><small>Caves · {paidBuyIns.length}/{players.length} reçues</small><strong>Encaisser {nextUnpaid.nickname} · {formatAmount(game.buyInAmount, game)}</strong><span>Un QR Lightning exact sera préparé avant confirmation, ou une confirmation espèces sera demandée.</span></div>
+      <div><small>Caves · {paidBuyIns.length}/{players.length} reçues</small><strong>Encaisser {nextUnpaid.nickname} · {formatAmount(game.buyInAmount, game)}</strong><span>Ce joueur a rejoint après le démarrage et doit encore régler sa cave initiale.</span></div>
       <button onClick={() => goTo(`player-${nextUnpaid.id}`)}>Continuer avec {nextUnpaid.nickname}</button>
     </Guide>;
 
     return <Guide ready>
-      <div><small>Caves · {paidBuyIns.length}/{players.length} reçues</small><strong>✓ Toutes les caves sont encaissées</strong><span>La partie peut se jouer. À la fin, passe au comptage des jetons physiques.</span></div>
+      <div><small>Partie en cours</small><strong>✓ Toutes les caves sont encaissées</strong><span>Les rebuys restent possibles. À la fin de la vraie partie, passe au comptage des jetons physiques.</span></div>
       <button onClick={() => goTo('collections')}>Terminer et compter</button>
     </Guide>;
   }
