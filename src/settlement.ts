@@ -102,7 +102,9 @@ export function calculateSettlement(
     return {
       playerId: stack.playerId,
       amount: roundAmount(distributableAmount * ratio, game.currency),
-      method: player.preferredPayment,
+      // The payment selected when joining is only for the initial cave. At payout,
+      // the beneficiary is free to choose cash or Lightning independently.
+      method: 'ANY' as const,
       status: 'PENDING' as const,
     };
   });
