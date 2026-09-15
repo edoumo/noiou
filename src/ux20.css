@@ -1,0 +1,60 @@
+/* UX20 keeps the game screen compact after the first explanatory pass. */
+.chip-rule-note,
+.impartiality-note {
+  display: none !important;
+}
+
+/* The UX19 sticky workflow helper duplicated real actions and could cover player controls. */
+.workflow-guide {
+  display: none !important;
+}
+
+/* Keep useful automatic scrolling without landing underneath fixed UI. */
+.player-box,
+#collections,
+#final-stacks,
+#settlements {
+  scroll-margin-top: 1rem;
+}
+
+/* Clarify the add action without adding another control. */
+#add-player > button.wide-mobile {
+  font-size: 0;
+}
+
+#add-player > button.wide-mobile::after {
+  content: 'Ajouter le joueur';
+  font-size: .92rem;
+  font-weight: 700;
+}
+
+.official-payment-actions {
+  display: grid !important;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  width: 100%;
+  gap: 8px;
+}
+
+.official-payment-actions.has-share {
+  grid-template-columns: repeat(3, minmax(0, 1fr));
+}
+
+.official-payment-actions > * {
+  width: 100%;
+  min-width: 0;
+  min-height: 44px;
+  margin: 0 !important;
+  padding-inline: 8px;
+  font-size: .82rem;
+}
+
+@media (max-width: 380px) {
+  .official-payment-actions,
+  .official-payment-actions.has-share {
+    grid-template-columns: 1fr;
+  }
+
+  .official-payment-actions > * {
+    font-size: .9rem;
+  }
+}
