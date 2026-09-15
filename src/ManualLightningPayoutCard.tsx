@@ -1,11 +1,11 @@
 import { useEffect, useMemo, useRef, useState } from 'react';
-import { QRCodeSVG } from 'qrcode.react';
 import type { Currency } from './domain';
 import { parseLightningDestination } from './lightningDestination';
 import { requestExactInvoiceFromReusableDestination } from './lnurlPay';
 import { parseExactBolt11Invoice } from './manualExternalLightning';
 import QrCameraScanner from './QrCameraScanner';
 import { decodeQrImageFile } from './qrImageImport';
+import ZoomableQr from './ZoomableQr';
 
 interface Props {
   label: string;
@@ -74,6 +74,20 @@ export default function ManualLightningPayoutCard({
     }
   }
 
+  async function shareInvoice() {
+    if (!effectiveInvoice || typeof navigator === 'undefined' || !navigator.share) return;
+    try {
+      await navigator.share({
+        title: `NOIOU · ${label}`,
+        text: `NOIOU · ${label} · ${sats.toLocaleString('fr-FR')} sats\nlightning:${effectiveInvoice}`,
+      });
+      setCopyStatus('Partage ouvert.');
+    } catch (error) {
+      if (error instanceof DOMException && error.name === 'AbortError') return;
+      setCopyStatus('Partage indisponible sur ce navigateur.');
+    }
+  }
+
   async function useBolt11(raw: string) {
     try {
       setInvoiceError('');
@@ -126,6 +140,7 @@ export default function ManualLightningPayoutCard({
 
   const cameraAvailable = typeof navigator !== 'undefined' && Boolean(navigator.mediaDevices?.getUserMedia);
   const clipboardAvailable = typeof navigator !== 'undefined' && Boolean(navigator.clipboard?.readText);
+  const shareAvailable = typeof navigator !== 'undefined' && typeof navigator.share === 'function';
 
   return (
     <div className="manual-payout">
@@ -146,11 +161,12 @@ export default function ManualLightningPayoutCard({
         <div className="official-payment-title"><span>QR officiel NOIOU</span><strong>{sats.toLocaleString('fr-FR')} sats</strong></div>
         {traceLabel && <small className="payment-trace">{traceLabel}</small>}
         <div className="invoice-qr" aria-label={`QR Lightning exact pour ${label}`}>
-          <QRCodeSVG value={effectiveInvoice} size={220} level="M" marginSize={2} />
+          <ZoomableQr value={effectiveInvoice} label={`Règlement ${label} · ${sats.toLocaleString('fr-FR')} sats`} />
         </div>
-        <div className="actions">
-          <a className="button-link primary" href={`lightning:${effectiveInvoice}`}>⚡ Ouvrir dans mon wallet</a>
-          <button type="button" disabled={disabled} onClick={() => void copy(effectiveInvoice, 'Invoice copiée.')}>📋 Copier l’invoice</button>
+        <div className={`actions official-payment-actions${shareAvailable ? ' has-share' : ''}`}>
+          <a className="button-link primary" href={`lightning:${effectiveInvoice}`}>⚡ Ouvrir</a>
+          <button type="button" disabled={disabled} onClick={() => void copy(effectiveInvoice, 'Invoice copiée.')}>📋 Copier</button>
+          {shareAvailable && <button type="button" disabled={disabled} onClick={() => void shareInvoice()}>↗ Partager</button>}
         </div>
         <small>Le montant de cette invoice a été vérifié localement par NOIOU avant affichage.</small>
       </div> : <div className="manual-bolt11-entry">

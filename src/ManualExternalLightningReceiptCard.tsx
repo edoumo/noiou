@@ -1,9 +1,9 @@
 import { useMemo, useRef, useState } from 'react';
-import { QRCodeSVG } from 'qrcode.react';
 import type { LightningInvoice } from './lightning';
 import { parseLightningDestination } from './lightningDestination';
 import QrCameraScanner from './QrCameraScanner';
 import { decodeQrImageFile } from './qrImageImport';
+import ZoomableQr from './ZoomableQr';
 import './manualExternalLightning.css';
 
 interface Props {
@@ -95,7 +95,7 @@ export default function ManualExternalLightningReceiptCard({ request, onUseBolt1
           </div>
           {request.traceLabel && <small className="payment-trace">{request.traceLabel}</small>}
           <div className="invoice-qr" aria-label="QR Lightning exact validé par NOIOU">
-            <QRCodeSVG value={request.request} size={220} level="M" marginSize={2} />
+            <ZoomableQr value={request.request} label={`Paiement NOIOU · ${request.sats.toLocaleString('fr-FR')} sats`} />
           </div>
           <p>Montre ce QR au joueur. Le montant est lié à l’invoice et a été contrôlé par NOIOU.</p>
         </div>

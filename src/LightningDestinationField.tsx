@@ -79,11 +79,18 @@ export default function LightningDestinationField({ label, value, onChange, opti
         />
         {value && <span className={`destination-kind ${parsed.reusable ? 'valid' : parsed.kind === 'BOLT11_INVOICE' ? 'warning' : 'unknown'}`}>{parsed.label}</span>}
       </div>
-      {parsed.kind === 'BOLT11_INVOICE' && <small className="destination-warning">Invoice BOLT11 ponctuelle (`lnbc…`, `lntb…` ou `lnbcrt…`) : elle peut expirer et ne doit pas être enregistrée comme destination permanente.</small>}
+      {parsed.kind === 'BOLT11_INVOICE' && <div className="destination-warning destination-blocker" role="alert">
+        <strong>⚠️ Invoice BOLT11 ponctuelle</strong>
+        <span>Elle peut expirer et ne peut pas être enregistrée comme destination permanente.</span>
+        <span><b>Action requise :</b> remplace-la par une Lightning Address, une offre BOLT12 ou un LNURL, ou efface ce champ. Tant qu’elle reste ici, l’enregistrement de cette configuration sera bloqué.</span>
+      </div>}
       {parsed.kind === 'BOLT12_OFFER' && <small className="destination-ok">Offre BOLT12 réutilisable (`lno1…`).</small>}
-      {compactHint && <small className="destination-hint">{compactHint}</small>}
-      <small className="destination-hint">Même téléphone : copie la destination depuis ton wallet ou importe une capture du QR depuis Photos.</small>
-      {!cameraAvailable && <small className="destination-hint">Caméra non disponible dans ce navigateur : utilise Photos, le presse-papiers ou la saisie manuelle.</small>}
+      <details className="destination-help">
+        <summary>ℹ️ Aide</summary>
+        {compactHint && <small className="destination-hint">{compactHint}</small>}
+        <small className="destination-hint">Même téléphone : copie la destination depuis ton wallet ou importe une capture du QR depuis Photos.</small>
+        {!cameraAvailable && <small className="destination-hint">Caméra non disponible dans ce navigateur : utilise Photos, le presse-papiers ou la saisie manuelle.</small>}
+      </details>
       {scanMessage && <small className="destination-hint">{scanMessage}</small>}
       {scanning && <QrCameraScanner onDetected={(raw) => applyDetected(raw, 'QR')} onCancel={() => setScanning(false)} />}
     </div>
