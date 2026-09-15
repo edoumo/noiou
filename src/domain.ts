@@ -54,6 +54,15 @@ export interface Game {
   buyInAmount: number;
   rebuyEnabled: boolean;
   rebuyAmount?: number;
+  /**
+   * Physical/table chip units issued for one standard buy-in.
+   * New sessions use this value so money and chips remain separate quantities.
+   */
+  chipsPerBuyIn?: number;
+  /**
+   * Legacy money-per-chip field kept so schema-v1 sessions/backups created before UX19 remain readable.
+   * New settlement logic prefers chipsPerBuyIn whenever it is present.
+   */
   chipValue: number;
   status: GameStatus;
   dealer: DealerRule;
