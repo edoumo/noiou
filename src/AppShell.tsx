@@ -7,6 +7,7 @@ import PartyJoinControl from './PartyJoinControl';
 import SessionResetControl from './SessionResetControl';
 import './uxFixes.css';
 import './ux20.css';
+import './ux22.css';
 
 export default function AppShell() {
   return (
