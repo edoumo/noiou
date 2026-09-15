@@ -37,6 +37,7 @@ import ManualLightningPayoutCard from './ManualLightningPayoutCard';
 import { MockLightningAdapter, type LightningInvoice } from './lightning';
 import { parseExactBolt11Invoice } from './manualExternalLightning';
 import { MAX_LIVE_GAME_INVOICE_SATS, useNwcSession } from './NwcSessionContext';
+import { initialBuyInMethods, paymentChoiceLabel, rebuyActionClass } from './paymentFlow';
 import {
   clearSession,
   loadSession,
@@ -359,7 +360,6 @@ export default function App() {
       lightningAddress: normalizedLightningDestination,
     };
     setPlayers((current) => [...current, player]);
-    setStacks((current) => ({ ...current, [player.id]: 0 }));
     setNickname('');
     setLightningAddress('');
     await record(game.id, 'PLAYER_JOINED', { playerId: player.id, nickname: player.nickname, preferredPayment: player.preferredPayment, reusableLightningDestination: Boolean(player.lightningAddress) });
@@ -553,7 +553,12 @@ export default function App() {
   async function validateStacks() {
     if (!game || game.status !== 'SETTLING') throw new Error('La partie doit être en règlement');
     await assertLedgerIntegrity();
-    const finalStacks: FinalStack[] = players.map((player) => ({ playerId: player.id, chips: stacks[player.id] ?? 0 }));
+    const finalStacks: FinalStack[] = players.map((player) => {
+      const chips = stacks[player.id];
+      if (chips === undefined) throw new Error(`Renseigne les jetons restants de ${player.nickname}. Saisis 0 si le joueur n’a plus aucun jeton.`);
+      if (!Number.isInteger(chips) || chips < 0) throw new Error(`Le nombre de jetons de ${player.nickname} doit être un entier positif ou nul.`);
+      return { playerId: player.id, chips };
+    });
     const result = calculateSettlement(game, players, contributions, finalStacks);
     setSettlement(result);
     if (!result.balanced) {
@@ -814,7 +819,7 @@ export default function App() {
         <section className="card">
           <div className="section-title"><h2>Créer la partie</h2><span>Réception Lightning : {receiveModeLabel(lightningReceiveMode)}</span></div>
           <div className="grid">
-            <label>Devise
+            <label>Devise de la partie
               <select value={currency} onChange={(event) => setCurrency(event.target.value as Currency)}>
                 <option value="EUR">EUR</option><option value="USD">USD</option><option value="SATS">SATS</option>
               </select>
@@ -876,11 +881,14 @@ export default function App() {
           </div>
           {lightningReceiveMode === 'NWC_RECEIVE_ONLY' && <p className="muted">NWC réel exige un wallet connecté et explicitement armé. Chaque invoice de cave/rebuy est plafonnée à {MAX_LIVE_GAME_INVOICE_SATS.toLocaleString('fr-FR')} sats.</p>}
           {lightningReceiveMode === 'EXTERNAL_WALLET_MANUAL' && <p className="muted impartiality-note">Compatible par capacité, pas par marque. Une Lightning Address ou un LNURL peut permettre à NOIOU de demander automatiquement une invoice exacte ; sinon le fallback est une BOLT11 du montant exact, vérifiée avant affichage.</p>}
-          <div className="donation-options">
-            <strong>❤️ Soutenir NOIOU au lancement (mock, hors cagnotte)</strong>
-            <div className="actions">{[0, 500, 1000, 5000].map((sats) => <button className={startupDonationSats === sats ? 'selected' : ''} key={sats} onClick={() => setStartupDonationSats(sats)}>{sats === 0 ? 'Pas maintenant' : `${sats.toLocaleString('fr-FR')} sats`}</button>)}</div>
-          </div>
-          <button className="primary wide" onClick={() => void execute(startGame)}>Démarrer la partie</button>
+          <details className="donation-options donation-details">
+            <summary>❤️ Soutenir NOIOU</summary>
+            <div className="donation-details-body">
+              <small>Don volontaire au lancement · mock dans cette alpha · toujours hors cagnotte.</small>
+              <div className="actions">{[0, 500, 1000, 5000].map((sats) => <button className={startupDonationSats === sats ? 'selected' : ''} key={sats} onClick={() => setStartupDonationSats(sats)}>{sats === 0 ? 'Pas maintenant' : `${sats.toLocaleString('fr-FR')} sats`}</button>)}</div>
+            </div>
+          </details>
+          <button className="primary wide" onClick={() => void execute(startGame)}>Continuer vers les joueurs</button>
         </section>
       )}
 
@@ -900,9 +908,9 @@ export default function App() {
             <div className="section-title"><h2>Ajouter un joueur</h2><span>{players.length} joueurs</span></div>
             <div className="grid player-form">
               <label>Pseudo<input value={nickname} onChange={(event) => setNickname(event.target.value)} placeholder="Alice" /></label>
-              <label>Règlement préféré
+              <label>Paiement de la première cave
                 <select value={preferredPayment} onChange={(event) => setPreferredPayment(event.target.value as PaymentMethod | 'ANY')}>
-                  <option value="CASH">Espèces</option><option value="LIGHTNING">Lightning</option><option value="ANY">À choisir à la fin</option>
+                  <option value="CASH">Espèces</option><option value="LIGHTNING">Lightning</option><option value="ANY">Espèces ou Lightning</option>
                 </select>
               </label>
               {(preferredPayment === 'LIGHTNING' || preferredPayment === 'ANY') && <LightningDestinationField
@@ -922,10 +930,14 @@ export default function App() {
             {players.map((player) => {
               const playerContributions = contributions.filter((contribution) => contribution.playerId === player.id);
               const buyInPaid = hasPaidBuyIn(player.id);
+              const initialMethods = initialBuyInMethods(player.preferredPayment);
               return (
                 <div className="player-box" id={`player-${player.id}`} key={player.id}>
-                  <div className="player-heading"><div><strong>{player.nickname}</strong><small>{player.preferredPayment}</small></div><span>{playerContributions.filter((item) => item.status === 'PAID').length} encaissé(s)</span></div>
-                  {!buyInPaid && !hasOpenBuyIn(player.id) && <div className="actions"><button onClick={() => void execute(() => addCashContribution(player, 'BUYIN'))}>Cave espèces reçues</button><button onClick={() => void execute(() => addLightningContribution(player, 'BUYIN'))}>Faire payer · {lightningButtonLabel}</button></div>}
+                  <div className="player-heading"><div><strong>{player.nickname}</strong><small>1re cave : {paymentChoiceLabel(player.preferredPayment)}</small></div><span>{playerContributions.filter((item) => item.status === 'PAID').length} encaissé(s)</span></div>
+                  {!buyInPaid && !hasOpenBuyIn(player.id) && <div className="actions">
+                    {initialMethods.includes('CASH') && <button onClick={() => void execute(() => addCashContribution(player, 'BUYIN'))}>Cave espèces reçues</button>}
+                    {initialMethods.includes('LIGHTNING') && <button onClick={() => void execute(() => addLightningContribution(player, 'BUYIN'))}>Faire payer · {lightningButtonLabel}</button>}
+                  </div>}
                   {playerContributions.map((contribution) => {
                     const invoice = invoices[contribution.id];
                     const sourceLabel = invoice?.source === 'NWC' ? ' · NWC réel' : invoice?.source === 'MANUAL_EXTERNAL' ? ' · wallet externe' : invoice ? ' · mock' : '';
@@ -942,7 +954,10 @@ export default function App() {
                         : <LightningInvoiceCard invoice={invoice} onSimulatePaid={() => void execute(() => checkLightningContribution(contribution.id))} />)}
                     </div>;
                   })}
-                  {buyInPaid && <div className="actions"><button onClick={() => setCashRebuyConfirmation(player)}>+ Rebuy espèces</button><button onClick={() => void execute(() => addLightningContribution(player, 'REBUY'))}>+ Rebuy {lightningButtonLabel}</button></div>}
+                  {buyInPaid && <div className="actions rebuy-actions">
+                    <button className={rebuyActionClass(player.preferredPayment, 'CASH')} onClick={() => setCashRebuyConfirmation(player)}>+ Rebuy espèces</button>
+                    <button className={rebuyActionClass(player.preferredPayment, 'LIGHTNING')} onClick={() => void execute(() => addLightningContribution(player, 'REBUY'))}>+ Rebuy {lightningButtonLabel}</button>
+                  </div>}
                 </div>
               );
             })}
@@ -956,7 +971,25 @@ export default function App() {
           <section className="card" id="final-stacks">
             <div className="section-title"><h2>Stacks finaux</h2><span>{stacksLocked ? 'verrouillés' : 'à compter'}</span></div>
             <p className="stack-explainer">Compte uniquement les jetons physiques / unités de stack. <strong>Ne saisis pas des sats.</strong> {expectedIssuedChips !== null ? `NOIOU attend ${expectedIssuedChips.toLocaleString('fr-FR')} jetons au total.` : ''}</p>
-            {players.map((player) => <div className="row" key={player.id}><div><strong>{player.nickname}</strong><small>Jetons restants</small></div><input aria-label={`Jetons ${player.nickname}`} type="number" min="0" step="1" disabled={stacksLocked || game.status === 'CLOSED'} value={stacks[player.id] ?? 0} onChange={(event) => setStacks((current) => ({ ...current, [player.id]: Number(event.target.value) }))} /></div>)}
+            {players.map((player) => <div className="row" key={player.id}><div><strong>{player.nickname}</strong><small>Jetons restants</small></div><input
+              aria-label={`Jetons ${player.nickname}`}
+              type="number"
+              min="0"
+              step="1"
+              inputMode="numeric"
+              disabled={stacksLocked || game.status === 'CLOSED'}
+              value={stacks[player.id] ?? ''}
+              placeholder="0"
+              onChange={(event) => {
+                const raw = event.target.value;
+                setStacks((current) => {
+                  const next = { ...current };
+                  if (raw === '') delete next[player.id];
+                  else next[player.id] = Number(raw);
+                  return next;
+                });
+              }}
+            /></div>)}
             {!stacksLocked && game.status === 'SETTLING' && <button className="primary wide" onClick={() => void execute(validateStacks)}>Valider le comptage des jetons</button>}
           </section>
 
@@ -1077,10 +1110,14 @@ export default function App() {
         <span className={`state ${game?.lightningReceiveMode === 'EXTERNAL_WALLET_MANUAL' || nwcMode === 'LIVE_ARMED' ? 'paid' : 'pending'}`}>{game?.lightningReceiveMode === 'EXTERNAL_WALLET_MANUAL' ? 'EXTERNE' : nwcMode === 'LIVE_ARMED' ? 'NWC RÉEL' : nwcMode === 'RECONNECT_REQUIRED' ? 'RECONNECTER' : nwcMode === 'DIAGNOSTIC' ? 'DIAGNOSTIC' : 'MOCK'}</span>
       </section>
 
-      <section className="card donation">
-        <div><h2>Soutenir NOIOU</h2><p>Dons volontaires, en sats, toujours hors cagnotte. Prototype : aucune transaction réelle pour les dons.</p><small>{projectDonations.length} don(s) mock · {totalDonations.toLocaleString('fr-FR')} sats au total</small></div>
-        {game?.status === 'CLOSED' ? <div className="donation-form"><label>Donateur (pseudo facultatif)<input value={donorLabel} onChange={(event) => setDonorLabel(event.target.value)} placeholder="Alice" /></label><label>Sats<input type="number" min="1" step="1" value={donationSats} onChange={(event) => setDonationSats(Number(event.target.value))} /></label><div className="actions">{[500, 1000, 5000].map((sats) => <button key={sats} onClick={() => setDonationSats(sats)}>{sats.toLocaleString('fr-FR')}</button>)}</div><button onClick={() => void execute(addEndDonation)}>⚡ Simuler le don</button></div> : <span className="muted">Un autre don pourra être proposé après clôture.</span>}
-      </section>
+      <details className="card donation donation-details">
+        <summary>❤️ Soutenir NOIOU</summary>
+        <div className="donation-details-body">
+          <p>Dons volontaires, en sats, toujours hors cagnotte. Prototype : aucune transaction réelle pour les dons.</p>
+          <small>{projectDonations.length} don(s) mock · {totalDonations.toLocaleString('fr-FR')} sats au total</small>
+          {game?.status === 'CLOSED' ? <div className="donation-form"><label>Donateur (pseudo facultatif)<input value={donorLabel} onChange={(event) => setDonorLabel(event.target.value)} placeholder="Alice" /></label><label>Sats<input type="number" min="1" step="1" value={donationSats} onChange={(event) => setDonationSats(Number(event.target.value))} /></label><div className="actions">{[500, 1000, 5000].map((sats) => <button key={sats} onClick={() => setDonationSats(sats)}>{sats.toLocaleString('fr-FR')}</button>)}</div><button onClick={() => void execute(addEndDonation)}>⚡ Simuler le don</button></div> : <span className="muted">Un autre don pourra être proposé après clôture.</span>}
+        </div>
+      </details>
 
       {game?.status === 'CLOSED' && <section className="card"><div className="section-title"><h2>Nouvelle soirée</h2><span>la partie actuelle est terminée</span></div><p className="muted">Exporte la sauvegarde si tu veux conserver une copie portable, puis efface la session locale.</p><button onClick={resetSession}>Effacer cette session locale et créer une nouvelle partie</button></section>}
 
