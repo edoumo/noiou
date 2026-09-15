@@ -81,7 +81,10 @@
   overflow: hidden;
 }
 
-.invoice-qr svg {
+/* Only size the inline QR trigger. The fullscreen dialog is rendered as a sibling
+   inside .invoice-qr, so a broad `.invoice-qr svg` selector would also cap the
+   enlarged QR and defeat tap-to-zoom. */
+.invoice-qr > .zoomable-qr-trigger > svg {
   display: block;
   width: min(220px, 72vw);
   height: auto;
