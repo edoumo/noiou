@@ -26,6 +26,8 @@ function Guide({ children, ready = false }: { children: React.ReactNode; ready?:
 
 export default function WorkflowGuide({ game, players, contributions, settlement, payouts, dealerPaid }: Props) {
   const paidBuyIns = players.filter((player) => contributions.some((item) => item.playerId === player.id && item.kind === 'BUYIN' && item.status === 'PAID'));
+  const pendingContribution = contributions.find((item) => item.status === 'CREATED' || item.status === 'PENDING');
+  const pendingContributionPlayer = pendingContribution ? players.find((player) => player.id === pendingContribution.playerId) : undefined;
   const nextUnpaid = players.find((player) => !paidBuyIns.some((paid) => paid.id === player.id));
   const pendingPayout = payouts.find((payout) => payout.amount > 0 && payout.status !== 'CONFIRMED');
   const pendingPayoutPlayer = pendingPayout ? players.find((player) => player.id === pendingPayout.playerId) : undefined;
@@ -34,6 +36,11 @@ export default function WorkflowGuide({ game, players, contributions, settlement
     if (players.length === 0) return <Guide>
       <div><small>Prochaine action</small><strong>Ajoute le premier joueur</strong><span>NOIOU te guidera ensuite cave par cave.</span></div>
       <button onClick={() => goTo('add-player')}>Ajouter un joueur</button>
+    </Guide>;
+
+    if (pendingContribution && pendingContributionPlayer) return <Guide>
+      <div><small>Paiement en attente</small><strong>Finaliser {pendingContributionPlayer.nickname} · {formatAmount(pendingContribution.amount, game)}</strong><span>{pendingContribution.method === 'LIGHTNING' ? 'Présente le QR exact, puis confirme uniquement après le paiement.' : 'Confirme uniquement après réception réelle des espèces.'}</span></div>
+      <button onClick={() => goTo(`player-${pendingContributionPlayer.id}`)}>Revenir à {pendingContributionPlayer.nickname}</button>
     </Guide>;
 
     if (nextUnpaid) return <Guide>
