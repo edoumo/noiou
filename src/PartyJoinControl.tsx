@@ -3,6 +3,7 @@ import { QRCodeSVG } from 'qrcode.react';
 import type { PaymentMethod, Player } from './domain';
 import { appendLedgerEvent, verifyLedger } from './ledger';
 import LightningDestinationField from './LightningDestinationField';
+import { paymentChoiceLabel } from './paymentFlow';
 import {
   buildPartyInviteUrl,
   createPartyInvite,
@@ -56,7 +57,7 @@ export default function PartyJoinControl() {
       setError('');
       if (typeof window === 'undefined') return;
       const snapshot = loadSession(window.localStorage);
-      if (!snapshot?.game || snapshot.game.status !== 'OPEN') throw new Error('Démarre une partie avant d’afficher son QR d’invitation.');
+      if (!snapshot?.game || snapshot.game.status !== 'OPEN') throw new Error('Configure une partie avant d’afficher son QR d’invitation.');
       const chipsPerBuyIn = snapshot.game.chipsPerBuyIn ?? (() => {
         const legacy = snapshot.game.buyInAmount / snapshot.game.chipValue;
         return Number.isInteger(legacy) && legacy > 0 ? legacy : undefined;
@@ -146,7 +147,6 @@ export default function PartyJoinControl() {
         ...snapshot,
         savedAt: new Date().toISOString(),
         players: [...snapshot.players, player],
-        stacks: { ...snapshot.stacks, [player.id]: 0 },
         ledger: [...snapshot.ledger, ledgerEvent],
       };
       saveSession(window.localStorage, next);
@@ -223,11 +223,11 @@ export default function PartyJoinControl() {
             <div className="party-join-game"><strong>Partie trouvée</strong><span>{inviteTerms}</span></div>
             <p className="muted">Vérifie ces conditions avant de rejoindre : le montant de la cave et le nombre de jetons remis viennent du QR de la partie.</p>
             <label>Pseudo<input value={nickname} onChange={(event) => setNickname(event.target.value)} placeholder="Alice" /></label>
-            <label>Règlement préféré
+            <label>Paiement de la première cave
               <select value={preferredPayment} onChange={(event) => setPreferredPayment(event.target.value as PaymentMethod | 'ANY')}>
                 <option value="CASH">Espèces</option>
                 <option value="LIGHTNING">Lightning</option>
-                <option value="ANY">À choisir à la fin</option>
+                <option value="ANY">Espèces ou Lightning</option>
               </select>
             </label>
             {paymentNeedsDestination && <LightningDestinationField
@@ -243,7 +243,7 @@ export default function PartyJoinControl() {
           {mode === 'RESPONSE' && responseQr && <>
             <p>Montre ce QR à l’organisateur. Lorsqu’il le scanne, ton joueur est ajouté à sa partie sans qu’il ressaisisse tes informations.</p>
             <div className="party-join-qr"><QRCodeSVG value={responseQr} size={240} level="M" marginSize={2} /></div>
-            <div className="party-join-game"><strong>{nickname.trim()}</strong><span>{preferredPayment}</span></div>
+            <div className="party-join-game"><strong>{nickname.trim()}</strong><span>1re cave : {paymentChoiceLabel(preferredPayment)}</span></div>
             <p className="muted">Ce QR contient uniquement les informations de participation que tu viens de saisir. Aucune seed, clé privée ou autorisation wallet.</p>
           </>}
 
