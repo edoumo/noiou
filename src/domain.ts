@@ -6,12 +6,15 @@ export type ContributionKind = 'BUYIN' | 'REBUY';
 export type ContributionStatus = 'CREATED' | 'PENDING' | 'PAID' | 'CANCELLED';
 export type PayoutStatus = 'PENDING' | 'CONFIRMED';
 export type LightningReceiveMode = 'MOCK' | 'NWC_RECEIVE_ONLY' | 'EXTERNAL_WALLET_MANUAL';
+export type PayoutExecution = 'CASH_CONFIRMATION' | 'MANUAL_EXTERNAL_WALLET' | 'ORGANIZER_WALLET_RETENTION';
 
 export type LedgerEventType =
   | 'GAME_CREATED'
+  | 'GAME_STARTED'
   | 'PLAYER_JOINED'
   | 'BUYIN_CREATED'
   | 'REBUY_CREATED'
+  | 'ORGANIZER_WALLET_ALLOCATION'
   | 'LIGHTNING_INVOICE_CREATED'
   | 'LIGHTNING_MANUAL_REQUEST_CREATED'
   | 'LIGHTNING_MANUAL_RECEIPT_CONFIRMED'
@@ -20,6 +23,7 @@ export type LedgerEventType =
   | 'SETTLEMENT_STARTED'
   | 'FINAL_STACKS_RECORDED'
   | 'SETTLEMENT_CALCULATED'
+  | 'ORGANIZER_PAYOUT_RETAINED'
   | 'PAYOUT_CONFIRMED'
   | 'DEALER_COMPENSATION_CONFIRMED'
   | 'DEALER_TIP_RECORDED'
@@ -36,6 +40,8 @@ export interface Player {
   nickname: string;
   preferredPayment: PaymentMethod | 'ANY';
   lightningAddress?: string;
+  /** True only for the player who is also operating the organizer wallet/device. */
+  isOrganizer?: boolean;
 }
 
 export interface DealerRule {
@@ -70,6 +76,12 @@ export interface Game {
   organizerLightningDestination?: string;
   lockedBtcFiatRate?: number;
   createdAt: string;
+  /**
+   * UX23 lobby marker. New games use lobbyVersion=1 and remain in preparation until startedAt is set.
+   * Missing lobbyVersion means a legacy OPEN session, which is treated as already started for compatibility.
+   */
+  lobbyVersion?: 1;
+  startedAt?: string;
 }
 
 export interface Contribution {
@@ -97,6 +109,8 @@ export interface Payout {
   status: PayoutStatus;
   /** One-time BOLT11 or reusable destination selected for this payout. */
   lightningRequest?: string;
+  /** How the payout was actually executed; organizer retention is explicitly non-transfer. */
+  execution?: PayoutExecution;
 }
 
 export interface DealerTip {
