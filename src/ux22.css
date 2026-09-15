@@ -1,0 +1,75 @@
+/* UX22: keep secondary choices compact and make the next action obvious. */
+.rebuy-actions .rebuy-primary {
+  flex: 2 1 180px;
+  font-weight: 800;
+}
+
+.rebuy-actions .rebuy-secondary {
+  flex: 1 1 130px;
+  opacity: .82;
+}
+
+.rebuy-actions .rebuy-equal {
+  flex: 1 1 160px;
+}
+
+.donation-details {
+  display: block;
+}
+
+.donation-details > summary {
+  cursor: pointer;
+  list-style: none;
+  font-weight: 800;
+  min-height: 44px;
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 10px;
+}
+
+.donation-details > summary::-webkit-details-marker {
+  display: none;
+}
+
+.donation-details > summary::after {
+  content: '▾';
+  opacity: .7;
+  transition: transform .15s ease;
+}
+
+.donation-details[open] > summary::after {
+  transform: rotate(180deg);
+}
+
+.donation-details-body {
+  display: grid;
+  gap: 10px;
+  padding-top: 10px;
+}
+
+.donation-options.donation-details {
+  padding: 8px 0;
+}
+
+#final-stacks input[type='number'] {
+  min-width: 0;
+}
+
+@media (max-width: 520px) {
+  .rebuy-actions {
+    display: grid !important;
+    grid-template-columns: minmax(0, 1.5fr) minmax(0, 1fr);
+  }
+
+  .rebuy-actions > button {
+    width: 100%;
+    min-width: 0;
+  }
+}
+
+@media (max-width: 360px) {
+  .rebuy-actions {
+    grid-template-columns: 1fr;
+  }
+}
