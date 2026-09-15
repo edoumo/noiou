@@ -35,8 +35,10 @@ import LightningInvoiceCard from './LightningInvoiceCard';
 import ManualExternalLightningReceiptCard from './ManualExternalLightningReceiptCard';
 import ManualLightningPayoutCard from './ManualLightningPayoutCard';
 import { MockLightningAdapter, type LightningInvoice } from './lightning';
+import { isPlayStarted, lobbyReadiness, MIN_POKER_PLAYERS } from './lobby';
 import { parseExactBolt11Invoice } from './manualExternalLightning';
 import { MAX_LIVE_GAME_INVOICE_SATS, useNwcSession } from './NwcSessionContext';
+import { allocateOrganizerWalletContribution, retainOrganizerPayout as retainOrganizerPayoutAccounting } from './organizerAccounting';
 import { initialBuyInMethods, paymentChoiceLabel, rebuyActionClass } from './paymentFlow';
 import {
   clearSession,
@@ -56,6 +58,7 @@ import {
 import WorkflowGuide from './WorkflowGuide';
 import './styles.css';
 import './ux19.css';
+import './ux23.css';
 
 function formatAmount(amount: number, currency: Currency): string {
   if (currency === 'SATS') return `${Math.round(amount).toLocaleString('fr-FR')} sats`;
@@ -150,6 +153,7 @@ export default function App() {
   const [nickname, setNickname] = useState('');
   const [preferredPayment, setPreferredPayment] = useState<PaymentMethod | 'ANY'>('CASH');
   const [lightningAddress, setLightningAddress] = useState('');
+  const [isOrganizerPlayer, setIsOrganizerPlayer] = useState(false);
   const [contributions, setContributions] = useState<Contribution[]>(initialSession?.contributions ?? []);
   const [invoices, setInvoices] = useState<Record<string, LightningInvoice>>(initialSession?.mockInvoices ?? {});
   const [stacks, setStacks] = useState<Record<string, number>>(initialSession?.stacks ?? {});
@@ -161,6 +165,7 @@ export default function App() {
   const [dealerTipAmounts, setDealerTipAmounts] = useState<Record<string, number>>({});
   const [dealerTipMethods, setDealerTipMethods] = useState<Record<string, PaymentMethod>>({});
   const [cashRebuyConfirmation, setCashRebuyConfirmation] = useState<Player | null>(null);
+  const [organizerAllocationConfirmation, setOrganizerAllocationConfirmation] = useState<{ player: Player; kind: ContributionKind } | null>(null);
   const [projectDonations, setProjectDonations] = useState<ProjectDonation[]>(initialSession?.projectDonations ?? []);
   const [donationSats, setDonationSats] = useState(1000);
   const [donorLabel, setDonorLabel] = useState('');
@@ -287,6 +292,10 @@ export default function App() {
     const currentIndex = players.findIndex((player) => player.id === playerId);
     const ordered = currentIndex >= 0 ? [...players.slice(currentIndex + 1), ...players.slice(0, currentIndex + 1)] : players;
     const nextPlayer = ordered.find((player) => !hasPaidBuyInIn(nextContributions, player.id));
+    if (game && !isPlayStarted(game) && !nextPlayer) {
+      scrollToTarget(players.length < MIN_POKER_PLAYERS ? 'add-player' : 'workflow-guide');
+      return;
+    }
     scrollToTarget(nextPlayer ? `player-${nextPlayer.id}` : 'workflow-guide');
   }
 
@@ -295,7 +304,7 @@ export default function App() {
     if (!Number.isInteger(chipsPerBuyIn) || chipsPerBuyIn <= 0) throw new Error('Le nombre de jetons par cave doit être un entier positif');
     if (currency !== 'SATS' && btcFiatRate <= 0) throw new Error('Un taux BTC/fiat positif est requis pour les paiements Lightning');
     if (lightningReceiveMode === 'EXTERNAL_WALLET_MANUAL' && currency !== 'SATS') throw new Error('Alpha wallet externe réel : utilise une partie en SATS. EUR/USD restent en mock tant que le modèle monétaire exact n’est pas migré.');
-    if (lightningReceiveMode === 'NWC_RECEIVE_ONLY' && !nwc.connected) throw new Error('Connecte et arme explicitement un wallet NWC receive-only avant de démarrer une partie en mode NWC réel');
+    if (lightningReceiveMode === 'NWC_RECEIVE_ONLY' && !nwc.connected) throw new Error('Connecte et arme explicitement un wallet NWC receive-only avant de préparer une partie en mode NWC réel');
     if (dealerEnabled && dealerMode !== 'NONE' && dealerValue < 0) throw new Error('La rémunération du dealer ne peut pas être négative');
     if (dealerEnabled && dealerMode === 'PERCENT' && dealerValue > 100) throw new Error('Le pourcentage dealer ne peut pas dépasser 100 %');
     if (dealerEnabled && dealerPayment === 'LIGHTNING' && !dealerLightningAddress.trim()) throw new Error('La destination Lightning du dealer est requise');
@@ -329,6 +338,7 @@ export default function App() {
       organizerLightningDestination: normalizedOrganizerDestination,
       lockedBtcFiatRate: currency === 'SATS' ? undefined : btcFiatRate,
       createdAt,
+      lobbyVersion: 1,
     };
     setGame(created);
     await record(created.id, 'GAME_CREATED', {
@@ -340,8 +350,10 @@ export default function App() {
       dealer: created.dealer,
       lightningReceiveMode: created.lightningReceiveMode,
       organizerDestinationConfigured: Boolean(created.organizerLightningDestination),
+      lobbyVersion: created.lobbyVersion,
     });
     if (startupDonationSats > 0) await recordDonation(created.id, startupDonationSats, 'Organisateur');
+    scrollToTarget('add-player');
   }
 
   async function addPlayer() {
@@ -349,6 +361,7 @@ export default function App() {
     const cleanNickname = nickname.trim();
     if (!cleanNickname) throw new Error('Le pseudo est obligatoire');
     if (players.some((player) => player.nickname.toLocaleLowerCase() === cleanNickname.toLocaleLowerCase())) throw new Error('Ce pseudo est déjà utilisé');
+    if (isOrganizerPlayer && players.some((player) => player.isOrganizer)) throw new Error('Un joueur est déjà identifié comme organisateur');
 
     const normalizedLightningDestination = lightningAddress.trim()
       ? normalizeReusableLightningDestination(lightningAddress)
@@ -358,12 +371,20 @@ export default function App() {
       nickname: cleanNickname,
       preferredPayment,
       lightningAddress: normalizedLightningDestination,
+      isOrganizer: isOrganizerPlayer || undefined,
     };
     setPlayers((current) => [...current, player]);
     setNickname('');
     setLightningAddress('');
-    await record(game.id, 'PLAYER_JOINED', { playerId: player.id, nickname: player.nickname, preferredPayment: player.preferredPayment, reusableLightningDestination: Boolean(player.lightningAddress) });
-    scrollToTarget(`player-${player.id}`);
+    setIsOrganizerPlayer(false);
+    await record(game.id, 'PLAYER_JOINED', {
+      playerId: player.id,
+      nickname: player.nickname,
+      preferredPayment: player.preferredPayment,
+      reusableLightningDestination: Boolean(player.lightningAddress),
+      isOrganizer: Boolean(player.isOrganizer),
+    });
+    scrollToTarget('add-player');
   }
 
   function hasPaidBuyIn(playerId: string): boolean {
@@ -374,10 +395,30 @@ export default function App() {
     return contributions.some((contribution) => contribution.playerId === playerId && contribution.kind === 'BUYIN' && contribution.status !== 'CANCELLED');
   }
 
+  async function beginPlay() {
+    if (!game || game.status !== 'OPEN') throw new Error('La partie doit être en préparation');
+    if (isPlayStarted(game)) return;
+    await assertLedgerIntegrity();
+    const readiness = lobbyReadiness(players, contributions);
+    if (!readiness.minimumPlayersMet) throw new Error(`Le poker nécessite au moins ${MIN_POKER_PLAYERS} joueurs`);
+    if (readiness.pendingFinancialAction) throw new Error('Une cave est encore en attente de confirmation');
+    if (!readiness.allInitialCavesPaid) throw new Error('Toutes les caves initiales doivent être encaissées avant de démarrer la partie');
+    const startedAt = new Date().toISOString();
+    setGame({ ...game, startedAt });
+    await record(game.id, 'GAME_STARTED', {
+      startedAt,
+      players: players.length,
+      paidInitialCaves: players.filter((player) => hasPaidBuyInIn(contributions, player.id)).length,
+      minimumPlayers: MIN_POKER_PLAYERS,
+    });
+    scrollToTarget('collections');
+  }
+
   async function addCashContribution(player: Player, kind: ContributionKind) {
     if (!game) throw new Error('Aucune partie');
     await assertLedgerIntegrity();
     if (kind === 'BUYIN' && hasOpenBuyIn(player.id)) throw new Error('Une cave existe déjà pour ce joueur');
+    if (kind === 'REBUY' && !isPlayStarted(game)) throw new Error('Les rebuys sont disponibles après le démarrage de la partie');
     if (kind === 'REBUY' && !hasPaidBuyIn(player.id)) throw new Error('La cave initiale doit être encaissée avant un rebuy');
 
     const contribution = createContribution(game, player.id, kind, 'CASH');
@@ -397,10 +438,54 @@ export default function App() {
     setCashRebuyConfirmation(null);
   }
 
+  async function addOrganizerContribution(player: Player, kind: ContributionKind) {
+    if (!game) throw new Error('Aucune partie');
+    await assertLedgerIntegrity();
+    if (kind === 'REBUY' && !isPlayStarted(game)) throw new Error('Les rebuys sont disponibles après le démarrage de la partie');
+    const allocated = allocateOrganizerWalletContribution(game, player, kind, contributions);
+    setContributions(allocated.contributions);
+    await record(game.id, kind === 'BUYIN' ? 'BUYIN_CREATED' : 'REBUY_CREATED', {
+      contributionId: allocated.contribution.id,
+      playerId: player.id,
+      method: 'LIGHTNING',
+      amount: allocated.contribution.amount,
+      sats: allocated.contribution.amount,
+      chipsIssued: game.chipsPerBuyIn ?? null,
+      source: 'ORGANIZER_WALLET_ALLOCATION',
+      noExternalTransfer: true,
+    });
+    await record(game.id, 'ORGANIZER_WALLET_ALLOCATION', {
+      contributionId: allocated.contribution.id,
+      playerId: player.id,
+      amount: allocated.contribution.amount,
+      sats: allocated.contribution.amount,
+      reference: allocated.reference,
+      noExternalTransfer: true,
+      attestation: 'ORGANIZER_FUNDS_ALREADY_IN_WALLET',
+    });
+    await record(game.id, 'CONTRIBUTION_PAID', {
+      contributionId: allocated.contribution.id,
+      playerId: player.id,
+      method: 'LIGHTNING',
+      source: 'ORGANIZER_WALLET_ALLOCATION',
+      verification: 'ORGANIZER_ATTESTATION',
+      noExternalTransfer: true,
+    });
+    if (kind === 'BUYIN') guideAfterBuyIn(player.id, allocated.contributions);
+  }
+
+  async function confirmOrganizerAllocation() {
+    const pending = organizerAllocationConfirmation;
+    if (!pending) return;
+    await addOrganizerContribution(pending.player, pending.kind);
+    setOrganizerAllocationConfirmation(null);
+  }
+
   async function addLightningContribution(player: Player, kind: ContributionKind) {
     if (!game) throw new Error('Aucune partie');
     await assertLedgerIntegrity();
     if (kind === 'BUYIN' && hasOpenBuyIn(player.id)) throw new Error('Une cave existe déjà pour ce joueur');
+    if (kind === 'REBUY' && !isPlayStarted(game)) throw new Error('Les rebuys sont disponibles après le démarrage de la partie');
     if (kind === 'REBUY' && !hasPaidBuyIn(player.id)) throw new Error('La cave initiale doit être encaissée avant un rebuy');
 
     const contribution = createContribution(game, player.id, kind, 'LIGHTNING');
@@ -541,9 +626,11 @@ export default function App() {
   async function beginSettlement() {
     if (!game || game.status !== 'OPEN') throw new Error('La partie n’est pas ouverte');
     await assertLedgerIntegrity();
-    if (players.length === 0) throw new Error('Ajoute au moins un joueur');
+    if (!isPlayStarted(game)) throw new Error('Démarre réellement la partie avant de pouvoir la terminer');
+    if (players.length < MIN_POKER_PLAYERS) throw new Error(`Le poker nécessite au moins ${MIN_POKER_PLAYERS} joueurs`);
     if (contributions.some((contribution) => contribution.status === 'CREATED' || contribution.status === 'PENDING')) throw new Error('Une cave ou un rebuy est encore en attente');
-    if (!contributions.some((contribution) => contribution.status === 'PAID')) throw new Error('Aucune cave encaissée');
+    const unpaid = players.filter((player) => !hasPaidBuyInIn(contributions, player.id));
+    if (unpaid.length > 0) throw new Error(`Cave initiale manquante : ${unpaid.map((player) => player.nickname).join(', ')}`);
     const next = { ...game, status: 'SETTLING' as const };
     setGame(next);
     await record(game.id, 'SETTLEMENT_STARTED', { paidContributions: contributions.filter((contribution) => contribution.status === 'PAID').length, expectedChips: calculateIssuedChips(game, contributions) });
@@ -579,7 +666,7 @@ export default function App() {
 
   function choosePayoutMethod(player: Player, method: PaymentMethod) {
     setPayouts((current) => current.map((payout) => payout.playerId === player.id && payout.status === 'PENDING'
-      ? { ...payout, method, lightningRequest: method === 'LIGHTNING' ? undefined : payout.lightningRequest }
+      ? { ...payout, method, lightningRequest: method === 'LIGHTNING' ? undefined : payout.lightningRequest, execution: undefined }
       : payout));
   }
 
@@ -589,7 +676,7 @@ export default function App() {
     if (!payout || payout.status !== 'PENDING') throw new Error('Payout introuvable');
     const sats = toSats(payout.amount, game);
     const normalized = parseExactBolt11Invoice(raw, sats);
-    setPayouts((current) => current.map((item) => item.playerId === playerId ? { ...item, method: 'LIGHTNING', lightningRequest: normalized } : item));
+    setPayouts((current) => current.map((item) => item.playerId === playerId ? { ...item, method: 'LIGHTNING', lightningRequest: normalized, execution: undefined } : item));
   }
 
   async function confirmPlayerPayout(payout: Payout) {
@@ -623,6 +710,35 @@ export default function App() {
       requestKind,
       traceLabel: buildTraceLabel(game.id, player.nickname, 'Règlement'),
       execution: payout.method === 'LIGHTNING' ? 'MANUAL_EXTERNAL_WALLET' : 'CASH_CONFIRMATION',
+    });
+    const next = confirmed.find((item) => item.amount > 0 && item.status !== 'CONFIRMED');
+    scrollToTarget(next ? `payout-${next.playerId}` : 'workflow-guide');
+  }
+
+  async function confirmOrganizerPayoutRetention(payout: Payout) {
+    if (!game || !settlement?.balanced) throw new Error('Le règlement n’est pas prêt');
+    if (game.currency !== 'SATS') throw new Error('La conservation dans le wallet organisateur est disponible uniquement pour une partie en SATS');
+    await assertLedgerIntegrity();
+    const player = players.find((candidate) => candidate.id === payout.playerId);
+    if (!player?.isOrganizer) throw new Error('Ce payout n’appartient pas au joueur organisateur');
+    const confirmed = retainOrganizerPayoutAccounting(payouts, player);
+    setPayouts(confirmed);
+    await record(game.id, 'ORGANIZER_PAYOUT_RETAINED', {
+      playerId: player.id,
+      amount: payout.amount,
+      sats: Math.round(payout.amount),
+      noExternalTransfer: true,
+      execution: 'ORGANIZER_WALLET_RETENTION',
+    });
+    await record(game.id, 'PAYOUT_CONFIRMED', {
+      playerId: player.id,
+      method: 'LIGHTNING',
+      amount: payout.amount,
+      sats: Math.round(payout.amount),
+      requestKind: null,
+      traceLabel: buildTraceLabel(game.id, player.nickname, 'Règlement'),
+      execution: 'ORGANIZER_WALLET_RETENTION',
+      noExternalTransfer: true,
     });
     const next = confirmed.find((item) => item.amount > 0 && item.status !== 'CONFIRMED');
     scrollToTarget(next ? `payout-${next.playerId}` : 'workflow-guide');
@@ -734,6 +850,7 @@ export default function App() {
     setDealerTipAmounts({});
     setDealerTipMethods({});
     setCashRebuyConfirmation(null);
+    setOrganizerAllocationConfirmation(null);
     setProjectDonations([]);
     setLedger(emptyLedger);
     setLedgerVerified(true);
@@ -744,6 +861,7 @@ export default function App() {
     setDonorLabel('');
     setLightningReceiveMode('MOCK');
     setOrganizerLightningDestination('');
+    setIsOrganizerPlayer(false);
   }
 
   const paidTotal = contributions.filter((contribution) => contribution.status === 'PAID').reduce((sum, contribution) => sum + contribution.amount, 0);
@@ -751,6 +869,8 @@ export default function App() {
   const closure = checkGameClosure(settlement, payouts, dealerPaid);
   const totalDonations = projectDonations.reduce((sum, donation) => sum + donation.sats, 0);
   const step = workflowStep(game);
+  const playStarted = isPlayStarted(game);
+  const readiness = game?.status === 'OPEN' && !playStarted ? lobbyReadiness(players, contributions) : null;
   const activeReceiveMode = game?.lightningReceiveMode ?? lightningReceiveMode;
   const lightningButtonLabel = activeReceiveMode === 'EXTERNAL_WALLET_MANUAL'
     ? 'Lightning'
@@ -768,6 +888,7 @@ export default function App() {
   if (game && (game.status === 'SETTLING' || game.status === 'CLOSED')) {
     try { expectedIssuedChips = calculateIssuedChips(game, contributions); } catch { expectedIssuedChips = null; }
   }
+  const organizerPlayer = players.find((player) => player.isOrganizer);
 
   return (
     <main className="shell">
@@ -894,12 +1015,12 @@ export default function App() {
 
       {game && <>
         <section className="card status-card sticky-summary">
-          <div><strong>Partie {game.status}</strong><small>{game.currency} · cave {formatAmount(game.buyInAmount, game.currency)}</small></div>
+          <div><strong>{game.status === 'OPEN' && !playStarted ? 'Préparation des joueurs' : game.status === 'OPEN' ? 'Partie en cours' : `Partie ${game.status}`}</strong><small>{game.currency} · cave {formatAmount(game.buyInAmount, game.currency)}</small></div>
           <div><strong>{players.length}</strong><small>joueur(s)</small></div>
           <div><strong>{formatAmount(paidTotal, game.currency)}</strong><small>encaissés</small></div>
           <div><strong>{game.chipsPerBuyIn ?? configuredChipsPerBuyIn(game)}</strong><small>jetons / cave</small></div>
         </section>
-        <WorkflowGuide game={game} players={players} contributions={contributions} settlement={settlement} payouts={payouts} dealerPaid={dealerPaid} />
+        <WorkflowGuide game={game} players={players} contributions={contributions} settlement={settlement} payouts={payouts} dealerPaid={dealerPaid} onStartGame={() => void execute(beginPlay)} />
       </>}
 
       {game?.status === 'OPEN' && (
@@ -913,7 +1034,10 @@ export default function App() {
                   <option value="CASH">Espèces</option><option value="LIGHTNING">Lightning</option><option value="ANY">Espèces ou Lightning</option>
                 </select>
               </label>
-              {(preferredPayment === 'LIGHTNING' || preferredPayment === 'ANY') && <LightningDestinationField
+              {!organizerPlayer && <label className="check"><input type="checkbox" checked={isOrganizerPlayer} onChange={(event) => setIsOrganizerPlayer(event.target.checked)} /> C’est l’organisateur</label>}
+              {organizerPlayer && <div className="organizer-player-note"><strong>Organisateur déjà identifié : {organizerPlayer.nickname}</strong><small>Une seule personne peut être liée au wallet organisateur pour éviter toute ambiguïté comptable.</small></div>}
+              {isOrganizerPlayer && <div className="organizer-player-note"><strong>Joueur organisateur</strong><small>En partie SATS, une cave Lightning sera affectée à la cagnotte depuis le wallet organisateur sans transaction vers soi. Le journal l’indiquera explicitement.</small></div>}
+              {!isOrganizerPlayer && (preferredPayment === 'LIGHTNING' || preferredPayment === 'ANY') && <LightningDestinationField
                 label="Destination Lightning"
                 value={lightningAddress}
                 onChange={setLightningAddress}
@@ -921,26 +1045,33 @@ export default function App() {
                 compactHint="Optionnelle : adresse @, QR/BOLT12 ou LNURL réutilisable. Sans destination, le joueur pourra fournir une invoice BOLT11 du montant exact au moment du payout."
               />}
             </div>
-            <button className="wide-mobile" onClick={() => void execute(addPlayer)}>Ajouter</button>
+            <button className="wide-mobile" onClick={() => void execute(addPlayer)}>Ajouter le joueur</button>
           </section>
 
           <section className="card" id="collections">
-            <div className="section-title"><h2>Caves et rebuys</h2><span>jetons seulement après encaissement confirmé</span></div>
+            <div className="section-title"><h2>{playStarted ? 'Caves et rebuys' : 'Caves initiales'}</h2><span>{playStarted ? 'partie en cours' : 'préparation avant de jouer'}</span></div>
             {players.length === 0 && <p className="muted">Ajoute les joueurs pour commencer.</p>}
+            {!playStarted && <div className="lobby-note" id="lobby-start">
+              <strong>{players.length < MIN_POKER_PLAYERS ? `${MIN_POKER_PLAYERS} joueurs minimum pour démarrer` : readiness?.canStart ? 'Tous les joueurs sont prêts' : 'Préparation des caves initiales'}</strong>
+              <small>{players.length < MIN_POKER_PLAYERS ? 'Continue à ajouter les participants. NOIOU ne proposera pas de terminer une partie qui n’a pas commencé.' : readiness?.canStart ? 'Utilise « Démarrer la partie » dans le guide ci-dessus. Les rebuys apparaîtront ensuite.' : 'Encaisse chaque première cave. Les rebuys et la fin de partie restent cachés tant que le poker n’a pas commencé.'}</small>
+            </div>}
             {players.map((player) => {
               const playerContributions = contributions.filter((contribution) => contribution.playerId === player.id);
               const buyInPaid = hasPaidBuyIn(player.id);
               const initialMethods = initialBuyInMethods(player.preferredPayment);
               return (
                 <div className="player-box" id={`player-${player.id}`} key={player.id}>
-                  <div className="player-heading"><div><strong>{player.nickname}</strong><small>1re cave : {paymentChoiceLabel(player.preferredPayment)}</small></div><span>{playerContributions.filter((item) => item.status === 'PAID').length} encaissé(s)</span></div>
+                  <div className="player-heading"><div><strong>{player.nickname}</strong>{player.isOrganizer && <span className="organizer-badge">Organisateur</span>}<small>1re cave : {paymentChoiceLabel(player.preferredPayment)}</small></div><span>{playerContributions.filter((item) => item.status === 'PAID').length} encaissé(s)</span></div>
                   {!buyInPaid && !hasOpenBuyIn(player.id) && <div className="actions">
                     {initialMethods.includes('CASH') && <button onClick={() => void execute(() => addCashContribution(player, 'BUYIN'))}>Cave espèces reçues</button>}
-                    {initialMethods.includes('LIGHTNING') && <button onClick={() => void execute(() => addLightningContribution(player, 'BUYIN'))}>Faire payer · {lightningButtonLabel}</button>}
+                    {initialMethods.includes('LIGHTNING') && (player.isOrganizer && game.currency === 'SATS'
+                      ? <button className="organizer-allocation-button" onClick={() => setOrganizerAllocationConfirmation({ player, kind: 'BUYIN' })}>Engager depuis le wallet organisateur</button>
+                      : <button onClick={() => void execute(() => addLightningContribution(player, 'BUYIN'))}>Faire payer · {lightningButtonLabel}</button>)}
                   </div>}
                   {playerContributions.map((contribution) => {
                     const invoice = invoices[contribution.id];
-                    const sourceLabel = invoice?.source === 'NWC' ? ' · NWC réel' : invoice?.source === 'MANUAL_EXTERNAL' ? ' · wallet externe' : invoice ? ' · mock' : '';
+                    const organizerAllocation = contribution.externalReference?.startsWith('organizer-allocation:');
+                    const sourceLabel = organizerAllocation ? ' · wallet organisateur · sans transfert' : invoice?.source === 'NWC' ? ' · NWC réel' : invoice?.source === 'MANUAL_EXTERNAL' ? ' · wallet externe' : invoice ? ' · mock' : '';
                     return <div className="contribution" key={contribution.id}>
                       <span>{contribution.kind} · {contribution.method}{sourceLabel}</span>
                       <strong>{formatAmount(contribution.amount, game.currency)}</strong>
@@ -954,14 +1085,16 @@ export default function App() {
                         : <LightningInvoiceCard invoice={invoice} onSimulatePaid={() => void execute(() => checkLightningContribution(contribution.id))} />)}
                     </div>;
                   })}
-                  {buyInPaid && <div className="actions rebuy-actions">
+                  {playStarted && buyInPaid && <div className="actions rebuy-actions">
                     <button className={rebuyActionClass(player.preferredPayment, 'CASH')} onClick={() => setCashRebuyConfirmation(player)}>+ Rebuy espèces</button>
-                    <button className={rebuyActionClass(player.preferredPayment, 'LIGHTNING')} onClick={() => void execute(() => addLightningContribution(player, 'REBUY'))}>+ Rebuy {lightningButtonLabel}</button>
+                    {player.isOrganizer && game.currency === 'SATS'
+                      ? <button className={rebuyActionClass(player.preferredPayment, 'LIGHTNING')} onClick={() => setOrganizerAllocationConfirmation({ player, kind: 'REBUY' })}>+ Rebuy depuis wallet organisateur</button>
+                      : <button className={rebuyActionClass(player.preferredPayment, 'LIGHTNING')} onClick={() => void execute(() => addLightningContribution(player, 'REBUY'))}>+ Rebuy {lightningButtonLabel}</button>}
                   </div>}
                 </div>
               );
             })}
-            {players.length > 0 && <button className="primary wide" onClick={() => void execute(beginSettlement)}>Terminer la partie et compter les jetons</button>}
+            {playStarted && players.length >= MIN_POKER_PLAYERS && <button className="primary wide" onClick={() => void execute(beginSettlement)}>Terminer la partie et compter les jetons</button>}
           </section>
         </>
       )}
@@ -1009,12 +1142,17 @@ export default function App() {
               return <div className="payout" id={`payout-${payout.playerId}`} key={payout.playerId}>
                 <span>{player.nickname}</span>
                 <strong>{formatAmount(payout.amount, game.currency)}</strong>
-                <small>{payout.method} · {payout.status}</small>
+                <small>{payout.execution === 'ORGANIZER_WALLET_RETENTION' ? 'Wallet organisateur · conservé ✓' : `${payout.method} · ${payout.status}`}</small>
                 {game.status !== 'CLOSED' && payout.status !== 'CONFIRMED' && payout.method === 'ANY' && <div className="payout-choice">
                   <strong>Comment veux-tu régler {player.nickname} ?</strong>
+                  {player.isOrganizer && game.currency === 'SATS' && <div className="organizer-retention">
+                    <strong>Aucun transfert vers soi nécessaire</strong>
+                    <small>La part gagnée peut simplement rester dans le wallet organisateur. NOIOU l’enregistre comme règlement sans transaction Lightning circulaire.</small>
+                    <button className="primary" onClick={() => void execute(() => confirmOrganizerPayoutRetention(payout))}>Conserver dans le wallet organisateur</button>
+                  </div>}
                   <div className="actions">
                     <button onClick={() => void execute(() => choosePayoutMethod(player, 'CASH'))}>Espèces</button>
-                    <button onClick={() => void execute(() => choosePayoutMethod(player, 'LIGHTNING'))}>Lightning</button>
+                    <button onClick={() => void execute(() => choosePayoutMethod(player, 'LIGHTNING'))}>{player.isOrganizer ? 'Lightning vers un autre wallet' : 'Lightning'}</button>
                   </div>
                 </div>}
                 {game.status !== 'CLOSED' && payout.status !== 'CONFIRMED' && payout.method === 'CASH' && <button onClick={() => void execute(() => confirmPlayerPayout(payout))}>Confirmer remise espèces</button>}
@@ -1128,6 +1266,15 @@ export default function App() {
         confirmLabel="Confirmer l’encaissement"
         onCancel={() => setCashRebuyConfirmation(null)}
         onConfirm={() => void execute(confirmCashRebuy)}
+      />
+
+      <ConfirmDialog
+        open={Boolean(organizerAllocationConfirmation && game)}
+        title={organizerAllocationConfirmation?.kind === 'REBUY' ? 'Confirmer le rebuy organisateur' : 'Confirmer la cave organisateur'}
+        message={organizerAllocationConfirmation && game ? `Affecter ${formatAmount(organizerAllocationConfirmation.kind === 'REBUY' ? (game.rebuyAmount ?? game.buyInAmount) : game.buyInAmount, game.currency)} déjà présents dans le wallet organisateur à la cagnotte de ${organizerAllocationConfirmation.player.nickname} ? Aucun transfert Lightning vers soi ne sera créé.` : ''}
+        confirmLabel="Affecter à la cagnotte"
+        onCancel={() => setOrganizerAllocationConfirmation(null)}
+        onConfirm={() => void execute(confirmOrganizerAllocation)}
       />
     </main>
   );
