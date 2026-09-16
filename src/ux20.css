@@ -9,6 +9,14 @@
   display: none !important;
 }
 
+/* UX23 needs exactly one workflow CTA before play starts. Keep it visible but non-sticky so UX20's occlusion fix stays intact. */
+.workflow-guide.start-game-action {
+  display: flex !important;
+  position: static;
+  top: auto;
+  z-index: auto;
+}
+
 /* Keep useful automatic scrolling without landing underneath fixed UI. */
 .player-box,
 #collections,
@@ -46,6 +54,12 @@
   margin: 0 !important;
   padding-inline: 8px;
   font-size: .82rem;
+}
+
+@media (max-width: 640px) {
+  .workflow-guide.start-game-action {
+    display: grid !important;
+  }
 }
 
 @media (max-width: 380px) {
