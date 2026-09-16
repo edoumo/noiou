@@ -8,6 +8,7 @@ import SessionResetControl from './SessionResetControl';
 import './uxFixes.css';
 import './ux20.css';
 import './ux22.css';
+import './ux24.css';
 
 export default function AppShell() {
   return (
