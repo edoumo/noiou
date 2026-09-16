@@ -22,8 +22,8 @@ function goTo(id: string) {
   document.getElementById(id)?.scrollIntoView({ behavior: 'smooth', block: 'start' });
 }
 
-function Guide({ children, ready = false }: { children: React.ReactNode; ready?: boolean }) {
-  return <aside id="workflow-guide" className={`workflow-guide${ready ? ' ready' : ''}`} aria-live="polite">{children}</aside>;
+function Guide({ children, ready = false, startAction = false }: { children: React.ReactNode; ready?: boolean; startAction?: boolean }) {
+  return <aside id="workflow-guide" className={`workflow-guide${ready ? ' ready' : ''}${startAction ? ' start-game-action' : ''}`} aria-live="polite">{children}</aside>;
 }
 
 export default function WorkflowGuide({ game, players, contributions, settlement, payouts, dealerPaid, onStartGame }: Props) {
@@ -56,7 +56,7 @@ export default function WorkflowGuide({ game, players, contributions, settlement
       <button onClick={() => goTo(`player-${nextUnpaid.id}`)}>Encaisser {nextUnpaid.nickname}</button>
     </Guide>;
 
-    if (readiness.canStart) return <Guide ready>
+    if (readiness.canStart) return <Guide ready startAction>
       <div><small>Préparation terminée</small><strong>✓ {players.length} joueurs prêts</strong><span>Toutes les caves initiales sont encaissées. Le poker peut maintenant commencer.</span></div>
       <button onClick={onStartGame}>Démarrer la partie</button>
     </Guide>;
