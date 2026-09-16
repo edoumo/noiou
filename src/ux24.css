@@ -1,0 +1,20 @@
+/* UX24: keep programmatic scroll landings clear of the sticky game summary. */
+#add-player,
+.player-box,
+#collections,
+#final-stacks,
+#settlements,
+.workflow-guide.start-game-action {
+  scroll-margin-top: 7rem;
+}
+
+@media (max-width: 640px) {
+  #add-player,
+  .player-box,
+  #collections,
+  #final-stacks,
+  #settlements,
+  .workflow-guide.start-game-action {
+    scroll-margin-top: 9rem;
+  }
+}
