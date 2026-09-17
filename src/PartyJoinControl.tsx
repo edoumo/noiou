@@ -15,6 +15,7 @@ import {
 } from './partyJoin';
 import QrCameraScanner from './QrCameraScanner';
 import { decodeQrImageFile } from './qrImageImport';
+import { readPageOrigin, rememberPendingJoinLanding } from './joinLanding';
 import { loadSession, saveSession } from './session';
 import './partyJoin.css';
 
@@ -149,6 +150,18 @@ export default function PartyJoinControl() {
         players: [...snapshot.players, player],
         ledger: [...snapshot.ledger, ledgerEvent],
       };
+      // UX26-F1: the reload below rebuilds the state with the new player already in the roster,
+      // so the classic "player count increased" detection cannot land on the new card. Persist a
+      // one-shot landing target (tab-scoped sessionStorage, survives the reload) consumed once by
+      // GuidedLobbyControl when the roster is rendered.
+      rememberPendingJoinLanding(window.sessionStorage, player.id, readPageOrigin());
+      // The reload would otherwise let the browser restore its previous scroll position (non
+      // deterministic), displacing the one-shot landing. Suppress it for this navigation only.
+      try {
+        window.history.scrollRestoration = 'manual';
+      } catch {
+        // best effort: the landing target works even if the browser still restores
+      }
       saveSession(window.localStorage, next);
       window.location.reload();
     } catch (caught) {

@@ -2,6 +2,7 @@ import { useEffect, useRef, useState } from 'react';
 import { createPortal } from 'react-dom';
 import { isPlayStarted, MIN_POKER_PLAYERS } from './lobby';
 import { buyInAttentionState, firstOutstandingBuyInPlayerId } from './lobbyGuidance';
+import { readPageOrigin, startPendingJoinLanding } from './joinLanding';
 import {
   loadSession,
   SESSION_CLEARED_EVENT,
@@ -143,6 +144,31 @@ export default function GuidedLobbyControl() {
     }
     previousPlayerCount.current = players.length;
   }, [game?.id, game?.status, players, playStarted, rosterReady]);
+
+  // UX26-F1: consume the one-shot landing target written by the QR join flow (PartyJoinControl
+  // acceptResponse) before its reload. Runs once per page boot; the helper waits over animation
+  // frames until the exact card is rendered, scrolls to it, then clears the key so no later
+  // render, manual refresh or other player addition can replay the landing.
+  useEffect(() => {
+    if (typeof window === 'undefined' || typeof document === 'undefined') return;
+    const stored = readSnapshot();
+    const roster = stored?.game?.status === 'OPEN' ? stored.players : [];
+    startPendingJoinLanding({
+      storage: window.sessionStorage,
+      roster,
+      pageOrigin: readPageOrigin(),
+      findElement: (domId) => {
+        const element = document.getElementById(domId);
+        if (!element || element.getClientRects().length === 0) return null;
+        return element;
+      },
+      requestFrame: (callback) => { window.requestAnimationFrame(callback); },
+    });
+    // Note: window.history.scrollRestoration intentionally stays 'manual' for the rest of this
+    // boot document once a join landing was pending (the guard set it before React mounted).
+    // This prevents any late browser restoration from fighting the one-shot landing scroll.
+    // Each later navigation starts a fresh document where the guard re-evaluates from scratch.
+  }, []);
 
   if (!game || game.status !== 'OPEN' || !portalTarget) return null;
 
