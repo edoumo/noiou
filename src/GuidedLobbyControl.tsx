@@ -10,8 +10,10 @@ import {
 } from './session';
 
 const LOBBY_ROSTER_READY_KEY = 'noiou.lobby-roster-ready.v1';
+const POST_RELOAD_SCROLL_KEY = 'noiou.post-reload-scroll-target.v1';
 
 type LobbyPhase = 'players' | 'collections' | 'collections-edit' | 'play-collapsed' | 'play-edit';
+type PostReloadLanding = { gameId: string; playerId: string };
 
 function readSnapshot(): SessionSnapshot | null {
   if (typeof window === 'undefined') return null;
@@ -32,9 +34,39 @@ function storeReadyGameId(gameId: string) {
   window.localStorage.setItem(LOBBY_ROSTER_READY_KEY, gameId);
 }
 
+function readPostReloadLanding(): PostReloadLanding | null {
+  if (typeof window === 'undefined') return null;
+  const raw = window.sessionStorage.getItem(POST_RELOAD_SCROLL_KEY);
+  if (!raw) return null;
+  try {
+    const parsed = JSON.parse(raw) as Partial<PostReloadLanding>;
+    if (typeof parsed.gameId !== 'string' || typeof parsed.playerId !== 'string') return null;
+    return { gameId: parsed.gameId, playerId: parsed.playerId };
+  } catch {
+    return null;
+  }
+}
+
+function clearPostReloadLanding() {
+  if (typeof window === 'undefined') return;
+  window.sessionStorage.removeItem(POST_RELOAD_SCROLL_KEY);
+}
+
 function scrollToTarget(id: string) {
   if (typeof document === 'undefined') return;
   window.setTimeout(() => document.getElementById(id)?.scrollIntoView({ behavior: 'smooth', block: 'start' }), 60);
+}
+
+function scrollToTargetAfterReload(id: string) {
+  if (typeof document === 'undefined' || typeof window === 'undefined') return;
+  window.requestAnimationFrame(() => {
+    window.requestAnimationFrame(() => {
+      document.getElementById(id)?.scrollIntoView({ behavior: 'auto', block: 'start' });
+      window.requestAnimationFrame(() => {
+        if ('scrollRestoration' in window.history) window.history.scrollRestoration = 'auto';
+      });
+    });
+  });
 }
 
 export default function GuidedLobbyControl() {
@@ -44,6 +76,7 @@ export default function GuidedLobbyControl() {
   const [portalTarget, setPortalTarget] = useState<HTMLElement | null>(null);
   const previousPlayerCount = useRef(snapshot?.players.length ?? 0);
   const previousGameId = useRef(snapshot?.game?.id ?? '');
+  const postReloadLanding = useRef<PostReloadLanding | null>(readPostReloadLanding());
 
   useEffect(() => {
     if (typeof window === 'undefined') return;
@@ -116,6 +149,24 @@ export default function GuidedLobbyControl() {
     const frame = window.requestAnimationFrame(() => setPortalTarget(document.getElementById('add-player')));
     return () => window.cancelAnimationFrame(frame);
   }, [game?.id, players.length, phase]);
+
+  useEffect(() => {
+    const landing = postReloadLanding.current;
+    if (!landing || !game) return;
+    if (landing.gameId !== game.id || game.status !== 'OPEN') {
+      clearPostReloadLanding();
+      postReloadLanding.current = null;
+      if (typeof window !== 'undefined' && 'scrollRestoration' in window.history) window.history.scrollRestoration = 'auto';
+      return;
+    }
+    if (!players.some((player) => player.id === landing.playerId)) return;
+    if (!portalTarget || !phase) return;
+
+    const targetId = phase === 'players' ? 'add-player' : `player-${landing.playerId}`;
+    clearPostReloadLanding();
+    postReloadLanding.current = null;
+    scrollToTargetAfterReload(targetId);
+  }, [game, players, phase, portalTarget]);
 
   useEffect(() => {
     const gameId = game?.id ?? '';
