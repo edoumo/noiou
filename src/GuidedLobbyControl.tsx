@@ -169,6 +169,7 @@ export default function GuidedLobbyControl() {
     if (!playStarted && !rosterReady && players.length >= MIN_POKER_PLAYERS) {
       return <div className="lobby-director" aria-live="polite">
         <strong>{players.length} joueurs ajoutés</strong>
+        <small className="lobby-roster-names">{players.map((player) => player.nickname).join(' · ')}</small>
         <small>Quand la table est prête, passe aux caves. Tu pourras encore ajouter quelqu’un ensuite si nécessaire.</small>
         <button type="button" className="primary wide" onClick={moveToCollections}>✓ Tous les joueurs sont ajoutés — Passer aux caves</button>
       </div>;
