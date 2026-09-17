@@ -18,6 +18,8 @@ import { decodeQrImageFile } from './qrImageImport';
 import { loadSession, saveSession } from './session';
 import './partyJoin.css';
 
+const POST_RELOAD_SCROLL_KEY = 'noiou.post-reload-scroll-target.v1';
+
 type Mode = 'CLOSED' | 'ORGANIZER' | 'SCAN_INVITE' | 'SCAN_RESPONSE' | 'PARTICIPANT' | 'RESPONSE';
 
 export default function PartyJoinControl() {
@@ -150,6 +152,11 @@ export default function PartyJoinControl() {
         ledger: [...snapshot.ledger, ledgerEvent],
       };
       saveSession(window.localStorage, next);
+      window.sessionStorage.setItem(POST_RELOAD_SCROLL_KEY, JSON.stringify({
+        gameId: snapshot.game.id,
+        playerId: player.id,
+      }));
+      if ('scrollRestoration' in window.history) window.history.scrollRestoration = 'manual';
       window.location.reload();
     } catch (caught) {
       setError(caught instanceof Error ? caught.message : String(caught));
