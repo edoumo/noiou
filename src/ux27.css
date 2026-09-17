@@ -1,0 +1,13 @@
+/* UX27 — mock retirement from the production experience. */
+.session-note.migration-note {
+  border-color: #fbbf24;
+  background: #fffbeb;
+  color: #92400e;
+  font-weight: 700;
+}
+
+:root[data-theme="dark"] .session-note.migration-note {
+  background: #422006;
+  border-color: #d97706;
+  color: #fde68a;
+}

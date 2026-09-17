@@ -8,7 +8,8 @@ NOIOU is not production-ready. Real funds are permitted only for deliberately ti
 - No omnibus wallet and no internal BTC balances held on behalf of users.
 - Real Lightning game receipts use receive-only NWC permissions; outgoing payment capabilities are rejected.
 - The NWC credential stays in browser memory and is never stored in the generic session snapshot, backup, audit ledger, container environment, or static bundle.
-- Real NWC game receipts are **SATS-only** in the current alpha; EUR/USD remain mock-only until money representation is migrated away from generic JavaScript-number fiat arithmetic.
+- Real NWC game receipts are **SATS-only** in the current alpha; EUR/USD remain limited to cash or the external-wallet flow until money representation is migrated away from generic JavaScript-number fiat arithmetic.
+- The mock "fictional payment" receive mode is compiled out of the production experience: it is unavailable in production builds, rejected by runtime guards, and legacy sessions that used it are migrated to the explicit external/manual flow with fictional receipts cancelled.
 - All money-changing operations must be idempotent.
 - A paid contribution may issue value once only.
 - One external Lightning invoice reference cannot be attached to multiple contributions.
@@ -23,10 +24,10 @@ NOIOU is not production-ready. Real funds are permitted only for deliberately ti
 ## Current controls
 
 - `LightningAdapter` keeps wallet integration outside business logic.
-- `MockLightningAdapter` supports development without real sats.
+- `MockLightningAdapter` supports development and automated tests only; production builds strip the mock receive mode from the UI, reject it at runtime and migrate legacy mock sessions to the external/manual flow.
 - `NwcReceiveOnlyAdapter` supports real invoice creation/status lookup while rejecting connections that expose outgoing-payment methods.
 - Connecting a wallet does not by itself arm real game receipts; arming is explicit.
-- Once a live game is committed to real NWC receipts, reload/disconnect cannot silently fall back to mock.
+- Once a live game is committed to real NWC receipts, reload/disconnect cannot silently fall back to a fictional path.
 - Real NWC game invoice creation fails closed unless the persisted active game is readable and denominated in SATS.
 - Per-invoice real-game receipts are capped by `MAX_LIVE_GAME_INVOICE_SATS`; first real tests should stay far below that ceiling.
 - Contribution guards reject duplicate invoice references and invalid state changes.

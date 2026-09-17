@@ -40,10 +40,20 @@ import { parseExactBolt11Invoice } from './manualExternalLightning';
 import { MAX_LIVE_GAME_INVOICE_SATS, useNwcSession } from './NwcSessionContext';
 import { allocateOrganizerWalletContribution, retainOrganizerPayout as retainOrganizerPayoutAccounting } from './organizerAccounting';
 import { initialBuyInMethods, paymentChoiceLabel, rebuyActionClass } from './paymentFlow';
+import { planMockRetirement, type MockRetirementPlan } from './receiveModeMigration';
+import {
+  assertReceiveModeAllowed,
+  availableReceiveModes,
+  defaultReceiveMode,
+  nwcRuntimeStateLabel,
+  receiveModeLabel,
+  RUNTIME,
+} from './runtimeMode';
 import {
   clearSession,
   loadSession,
   saveSession,
+  sessionRequiresNwcReceipts,
   SESSION_SCHEMA_VERSION,
   type SessionSnapshot,
 } from './session';
@@ -110,10 +120,39 @@ function workflowStep(game: Game | null): number {
   return 4;
 }
 
-function receiveModeLabel(mode: LightningReceiveMode): string {
-  if (mode === 'NWC_RECEIVE_ONLY') return 'NWC automatique';
-  if (mode === 'EXTERNAL_WALLET_MANUAL') return 'Wallet externe manuel';
-  return 'Mock';
+interface BootSession {
+  session: SessionSnapshot | null;
+  migrationNotice: string;
+  migration: MockRetirementPlan | null;
+}
+
+/**
+ * UX27 — the "Mock / test" receive mode is retired from the production experience.
+ * An active local session whose receive mode resolved to mock (or to nothing, the old
+ * default) must never keep creating fictional invoices or count fictional receipts as
+ * real money: at boot we migrate it to the explicit external/manual flow, cancel every
+ * fictional cave/rebuy and let the organizer re-collect them through a real flow.
+ * Development/test builds keep the mock available and skip the migration entirely.
+ */
+function readBootSession(): BootSession {
+  const stored = readStoredSession();
+  if (!stored) return { session: null, migrationNotice: '', migration: null };
+  const plan = planMockRetirement(stored, {
+    allowMockPayments: RUNTIME.allowMockPayments,
+    nwcLocked: sessionRequiresNwcReceipts(stored),
+  });
+  if (!plan.migrated || !plan.game) return { session: stored, migrationNotice: '', migration: null };
+  const cancelledCount = plan.cancelledOpenContributionIds.length + plan.cancelledPaidContributionIds.length;
+  const details = plan.historicalMockReceiptsRemain
+    ? 'Son historique reste consultable, mais elle n’accepte plus aucune nouvelle cave fictive.'
+    : cancelledCount > 0
+      ? `${cancelledCount} cave(s)/rebuy fictif(s) ont été annulés pour ne jamais compter comme de l’argent réel. Réencaisse-les via le wallet réel avant de démarrer ou régler la partie.`
+      : 'Aucun encaissement fictif n’était en cours : la partie peut continuer en wallet externe.';
+  return {
+    session: { ...stored, game: plan.game, contributions: plan.contributions },
+    migrationNotice: `L’ancien mode d’encaissement fictif a été retiré de cette version. La réception Lightning de cette partie passe en « Wallet externe manuel ». ${details}`,
+    migration: plan,
+  };
 }
 
 function scrollToTarget(id: string) {
@@ -127,7 +166,9 @@ function hasPaidBuyInIn(contributions: readonly Contribution[], playerId: string
 
 export default function App() {
   const nwc = useNwcSession();
-  const [initialSession] = useState<SessionSnapshot | null>(() => readStoredSession());
+  const [boot] = useState<BootSession>(() => readBootSession());
+  const initialSession = boot.session;
+  const [migrationNotice, setMigrationNotice] = useState(boot.migrationNotice);
   const adapterRef = useRef<MockLightningAdapter | null>(null);
   const backupInputRef = useRef<HTMLInputElement | null>(null);
   if (!adapterRef.current) adapterRef.current = new MockLightningAdapter(mockInvoicesOnly(initialSession?.mockInvoices ?? {}));
@@ -138,7 +179,7 @@ export default function App() {
   const [buyIn, setBuyIn] = useState(initialSession?.game?.buyInAmount ?? 10);
   const [chipsPerBuyIn, setChipsPerBuyIn] = useState(() => configuredChipsPerBuyIn(initialSession?.game));
   const [btcFiatRate, setBtcFiatRate] = useState(initialSession?.game?.lockedBtcFiatRate ?? 100_000);
-  const [lightningReceiveMode, setLightningReceiveMode] = useState<LightningReceiveMode>(initialSession?.game?.lightningReceiveMode ?? 'MOCK');
+  const [lightningReceiveMode, setLightningReceiveMode] = useState<LightningReceiveMode>(() => initialSession?.game?.lightningReceiveMode ?? defaultReceiveMode(nwc.connected));
   const [organizerLightningDestination, setOrganizerLightningDestination] = useState(initialSession?.game?.organizerLightningDestination ?? '');
   const [dealerEnabled, setDealerEnabled] = useState(initialSession?.game?.dealer.enabled ?? false);
   const [dealerMode, setDealerMode] = useState<'NONE' | 'FIXED' | 'PERCENT'>(() => normalizeDealerMode(initialSession?.game?.dealer.mode));
@@ -175,6 +216,18 @@ export default function App() {
   const [sessionRestored, setSessionRestored] = useState(Boolean(initialSession?.game));
   const [backupStatus, setBackupStatus] = useState('');
   const [error, setError] = useState('');
+  /** UX27: tracks a deliberate organizer choice so the safe default never overrides it. */
+  const receiveModeTouched = useRef(false);
+
+  /**
+   * Explicit, safe default (no silent fallback): before a game exists, arming a real NWC
+   * wallet selects the NWC automatic mode; otherwise the external/manual wallet flow stays
+   * selected. A manual choice is always respected.
+   */
+  useEffect(() => {
+    if (game || receiveModeTouched.current) return;
+    if (nwc.connected) setLightningReceiveMode('NWC_RECEIVE_ONLY');
+  }, [game, nwc.connected]);
 
   function snapshot(savedAt = new Date().toISOString()): SessionSnapshot {
     return {
@@ -218,7 +271,7 @@ export default function App() {
       setBuyIn(restored.game.buyInAmount);
       setChipsPerBuyIn(configuredChipsPerBuyIn(restored.game));
       setBtcFiatRate(restored.game.lockedBtcFiatRate ?? 100_000);
-      setLightningReceiveMode(restored.game.lightningReceiveMode ?? 'MOCK');
+      setLightningReceiveMode(restored.game.lightningReceiveMode ?? defaultReceiveMode(nwc.connected));
       setOrganizerLightningDestination(restored.game.organizerLightningDestination ?? '');
       setDealerEnabled(restored.game.dealer.enabled);
       setDealerMode(normalizeDealerMode(restored.game.dealer.mode));
@@ -255,6 +308,26 @@ export default function App() {
     setLastSavedAt(savedAt);
   }, [game, players, contributions, invoices, stacks, stacksLocked, settlement, payouts, dealerPaid, dealerTips, ledger, projectDonations]);
 
+  /**
+   * UX27: record the one-time mock-retirement migration in the tamper-evident ledger so the
+   * audit trail explains why fictional receipts were cancelled. Runs once per app boot.
+   */
+  const bootMigrationRecorded = useRef(false);
+  useEffect(() => {
+    if (bootMigrationRecorded.current) return;
+    bootMigrationRecorded.current = true;
+    const migration = boot.migration;
+    if (!migration?.game) return;
+    void record(migration.game.id, 'RECEIVE_MODE_MIGRATED', {
+      from: 'MOCK',
+      to: 'EXTERNAL_WALLET_MANUAL',
+      cancelledOpenContributionIds: migration.cancelledOpenContributionIds,
+      cancelledPaidContributionIds: migration.cancelledPaidContributionIds,
+      historicalMockReceiptsRemain: migration.historicalMockReceiptsRemain,
+    });
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, []);
+
   async function execute(action: () => void | Promise<void>) {
     try {
       setError('');
@@ -285,7 +358,7 @@ export default function App() {
       createdAt: new Date().toISOString(),
     };
     setProjectDonations((current) => [...current, donation]);
-    await record(gameId, 'PROJECT_DONATION_RECORDED', { donationId: donation.id, sats, donorLabel: donation.donorLabel ?? null, mock: true });
+    await record(gameId, 'PROJECT_DONATION_RECORDED', { donationId: donation.id, sats, donorLabel: donation.donorLabel ?? null, simulated: true });
   }
 
   function guideAfterBuyIn(playerId: string, nextContributions: readonly Contribution[]) {
@@ -303,7 +376,8 @@ export default function App() {
     if (buyIn <= 0) throw new Error('La cave doit être positive');
     if (!Number.isInteger(chipsPerBuyIn) || chipsPerBuyIn <= 0) throw new Error('Le nombre de jetons par cave doit être un entier positif');
     if (currency !== 'SATS' && btcFiatRate <= 0) throw new Error('Un taux BTC/fiat positif est requis pour les paiements Lightning');
-    if (lightningReceiveMode === 'EXTERNAL_WALLET_MANUAL' && currency !== 'SATS') throw new Error('Alpha wallet externe réel : utilise une partie en SATS. EUR/USD restent en mock tant que le modèle monétaire exact n’est pas migré.');
+    assertReceiveModeAllowed(lightningReceiveMode, RUNTIME.allowMockPayments);
+    if (lightningReceiveMode === 'NWC_RECEIVE_ONLY' && currency !== 'SATS') throw new Error('Alpha NWC réel : les caves et rebuys Lightning réels sont limités aux parties en SATS dans cette version.');
     if (lightningReceiveMode === 'NWC_RECEIVE_ONLY' && !nwc.connected) throw new Error('Connecte et arme explicitement un wallet NWC receive-only avant de préparer une partie en mode NWC réel');
     if (dealerEnabled && dealerMode !== 'NONE' && dealerValue < 0) throw new Error('La rémunération du dealer ne peut pas être négative');
     if (dealerEnabled && dealerMode === 'PERCENT' && dealerValue > 100) throw new Error('Le pourcentage dealer ne peut pas dépasser 100 %');
@@ -490,7 +564,9 @@ export default function App() {
     const contribution = createContribution(game, player.id, kind, 'LIGHTNING');
     const sats = toSats(contribution.amount, game);
     if (sats <= 0) throw new Error('Le montant converti en sats est trop faible');
-    const receiveMode = game.lightningReceiveMode ?? (nwc.connected ? 'NWC_RECEIVE_ONLY' : 'MOCK');
+    const receiveMode = game.lightningReceiveMode
+      ?? (nwc.connected ? 'NWC_RECEIVE_ONLY' : (RUNTIME.allowMockPayments ? 'MOCK' : 'EXTERNAL_WALLET_MANUAL'));
+    assertReceiveModeAllowed(receiveMode, RUNTIME.allowMockPayments);
     const ordinal = contributions.filter((item) => item.playerId === player.id && item.kind === kind).length + 1;
     const traceLabel = buildPaymentTrace(game.id, player.nickname, kind, ordinal);
 
@@ -561,6 +637,10 @@ export default function App() {
     const contribution = contributions.find((item) => item.id === contributionId);
     const invoice = invoices[contributionId];
     if (!contribution?.externalReference || !invoice || invoice.source !== 'MANUAL_EXTERNAL') throw new Error('Encaissement wallet externe introuvable');
+    // UX27 idempotence: a second click/event on an already-confirmed receipt must never
+    // append a duplicate payment event; the receipt is already recorded.
+    if (contribution.status === 'PAID') return;
+    if (contribution.status === 'CANCELLED') throw new Error('Cette cave a été annulée : elle ne peut plus être confirmée');
     if (!invoice.request.trim()) throw new Error('NOIOU exige une invoice BOLT11 du montant exact avant confirmation');
 
     const parsed = parseLightningDestination(invoice.request);
@@ -597,11 +677,17 @@ export default function App() {
     const invoice = invoices[contributionId];
     if (!contribution?.externalReference || !invoice) throw new Error('Invoice introuvable');
     if (invoice.source === 'MANUAL_EXTERNAL') throw new Error('Cet encaissement doit être confirmé explicitement depuis la carte wallet externe');
+    // UX27 idempotence: rechecking an already-paid contribution must not double-credit it.
+    if (contribution.status === 'PAID') return;
+    if (contribution.status === 'CANCELLED') throw new Error('Cette cave a été annulée : elle ne peut plus être encaissée');
 
     let status: LightningInvoice['status'];
     if (invoice.source === 'NWC') {
       status = await nwc.getInvoiceStatus(invoice);
     } else {
+      // UX27 defence in depth: a production build can never mark a fictional request as paid,
+      // even if a forged/legacy session smuggled one into the local state.
+      assertReceiveModeAllowed('MOCK', RUNTIME.allowMockPayments);
       adapterRef.current!.markInvoicePaid(contribution.externalReference);
       status = await adapterRef.current!.getInvoiceStatus(contribution.externalReference);
     }
@@ -825,7 +911,15 @@ export default function App() {
 
   async function importBackup(file: File) {
     if (game && game.status !== 'CLOSED') throw new Error('Clôture ou efface la partie active avant d’importer une sauvegarde');
-    const restored = await parseSessionBackup(await file.text());
+    let restored = await parseSessionBackup(await file.text());
+    const plan = planMockRetirement(restored, {
+      allowMockPayments: RUNTIME.allowMockPayments,
+      nwcLocked: sessionRequiresNwcReceipts(restored),
+    });
+    if (plan.migrated && plan.game) {
+      restored = { ...restored, game: plan.game, contributions: plan.contributions };
+      setMigrationNotice('Sauvegarde importée : l’ancien mode d’encaissement fictif a été retiré, la réception Lightning passe en « Wallet externe manuel ». Réencaisse les caves fictives annulées via le wallet réel.');
+    }
     applySnapshot(restored);
     if (typeof window !== 'undefined') saveSession(window.localStorage, restored);
     setBackupStatus('Sauvegarde importée · intégrité et journal vérifiés.');
@@ -858,9 +952,10 @@ export default function App() {
     setBackupStatus('');
     setStartupDonationSats(0);
     setDonorLabel('');
-    setLightningReceiveMode('MOCK');
+    setLightningReceiveMode(defaultReceiveMode(nwc.connected));
     setOrganizerLightningDestination('');
     setIsOrganizerPlayer(false);
+    receiveModeTouched.current = false;
   }
 
   const paidTotal = contributions.filter((contribution) => contribution.status === 'PAID').reduce((sum, contribution) => sum + contribution.amount, 0);
@@ -875,7 +970,7 @@ export default function App() {
     ? 'Lightning'
     : activeReceiveMode === 'NWC_RECEIVE_ONLY'
       ? (nwc.transportConnected ? 'NWC réel' : 'NWC réel · reconnecter')
-      : 'Lightning mock';
+      : (RUNTIME.allowMockPayments ? 'Lightning mock' : 'Lightning');
   const nwcMode = nwc.activeGameLockedToNwc && !nwc.transportConnected
     ? 'RECONNECT_REQUIRED'
     : nwc.liveGameReceiptsArmed && nwc.transportConnected
@@ -914,6 +1009,7 @@ export default function App() {
       </nav>
 
       {sessionRestored && <div className="session-note"><span>Session locale restaurée · aucun secret wallet n’est stocké. Une invoice NWC en attente nécessite de reconnecter le wallet pour vérifier son paiement.</span><button onClick={() => setSessionRestored(false)}>OK</button></div>}
+      {migrationNotice && <div className="session-note migration-note"><span>🔄 {migrationNotice}</span><button onClick={() => setMigrationNotice('')}>OK</button></div>}
       {game?.lightningReceiveMode === 'EXTERNAL_WALLET_MANUAL' && <div className="session-note live-note"><span>⚡ Wallet Lightning externe : NOIOU prépare ou vérifie une invoice du montant exact avant de l’afficher au joueur. L’organisateur confirme la réception uniquement après vérification dans son wallet.</span></div>}
       {nwcMode === 'LIVE_ARMED' && <div className="session-note live-note"><span>⚡ Réception NWC réelle armée{nwc.connection?.alias ? ` · ${nwc.connection.alias}` : ''}. Les caves/rebuys créditent directement le wallet de l’organisateur. Les payouts restent manuels hors NOIOU.</span></div>}
       {nwcMode === 'RECONNECT_REQUIRED' && <div className="session-note reconnect-note"><span>⚠️ Cette partie est verrouillée en NWC réel mais le wallet est déconnecté. Reconnecte le même wallet receive-only avant toute nouvelle cave/rebuy ou vérification d’invoice.</span></div>}
@@ -937,7 +1033,7 @@ export default function App() {
 
       {!game && (
         <section className="card">
-          <div className="section-title"><h2>Créer la partie</h2><span>Réception Lightning : {receiveModeLabel(lightningReceiveMode)}</span></div>
+          <div className="section-title"><h2>Créer la partie</h2><span>Réception Lightning : {receiveModeLabel(lightningReceiveMode, RUNTIME.allowMockPayments)}</span></div>
           <div className="grid">
             <label>Devise de la partie
               <select value={currency} onChange={(event) => setCurrency(event.target.value as Currency)}>
@@ -955,10 +1051,8 @@ export default function App() {
               <input type="number" min="1" value={btcFiatRate} onChange={(event) => setBtcFiatRate(Number(event.target.value))} />
             </label>}
             <label>Réception Lightning des caves
-              <select value={lightningReceiveMode} onChange={(event) => setLightningReceiveMode(event.target.value as LightningReceiveMode)}>
-                <option value="MOCK">Mock / test</option>
-                <option value="NWC_RECEIVE_ONLY">NWC automatique</option>
-                <option value="EXTERNAL_WALLET_MANUAL">Wallet externe manuel</option>
+              <select value={lightningReceiveMode} onChange={(event) => { receiveModeTouched.current = true; setLightningReceiveMode(event.target.value as LightningReceiveMode); }}>
+                {availableReceiveModes(RUNTIME.allowMockPayments).map((mode) => <option key={mode} value={mode}>{receiveModeLabel(mode, RUNTIME.allowMockPayments)}</option>)}
               </select>
             </label>
             {lightningReceiveMode === 'EXTERNAL_WALLET_MANUAL' && <div className="wallet-association">
@@ -1004,7 +1098,7 @@ export default function App() {
           <details className="donation-options donation-details">
             <summary>❤️ Soutenir NOIOU</summary>
             <div className="donation-details-body">
-              <small>Don volontaire au lancement · mock dans cette alpha · toujours hors cagnotte.</small>
+              <small>Don volontaire au lancement · enregistré localement dans cette alpha · toujours hors cagnotte.</small>
               <div className="actions">{[0, 500, 1000, 5000].map((sats) => <button className={startupDonationSats === sats ? 'selected' : ''} key={sats} onClick={() => setStartupDonationSats(sats)}>{sats === 0 ? 'Pas maintenant' : `${sats.toLocaleString('fr-FR')} sats`}</button>)}</div>
             </div>
           </details>
@@ -1070,7 +1164,7 @@ export default function App() {
                   {playerContributions.map((contribution) => {
                     const invoice = invoices[contribution.id];
                     const organizerAllocation = contribution.externalReference?.startsWith('organizer-allocation:');
-                    const sourceLabel = organizerAllocation ? ' · wallet organisateur · sans transfert' : invoice?.source === 'NWC' ? ' · NWC réel' : invoice?.source === 'MANUAL_EXTERNAL' ? ' · wallet externe' : invoice ? ' · mock' : '';
+                    const sourceLabel = organizerAllocation ? ' · wallet organisateur · sans transfert' : invoice?.source === 'NWC' ? ' · NWC réel' : invoice?.source === 'MANUAL_EXTERNAL' ? ' · wallet externe' : invoice?.source === 'MOCK' ? (RUNTIME.allowMockPayments ? ' · mock' : ' · mode test retiré') : '';
                     return <div className="contribution" key={contribution.id}>
                       <span>{contribution.kind} · {contribution.method}{sourceLabel}</span>
                       <strong>{formatAmount(contribution.amount, game.currency)}</strong>
@@ -1234,25 +1328,27 @@ export default function App() {
           : nwcMode === 'LIVE_ARMED'
             ? `NWC réel armé${nwc.connection?.alias ? ` sur ${nwc.connection.alias}` : ''}. Les caves/rebuys créent de vraies invoices. Les sorties restent manuelles.`
             : nwcMode === 'RECONNECT_REQUIRED'
-              ? 'Partie NWC réelle active, wallet déconnecté : reconnecte le même wallet receive-only. Aucun fallback mock.'
+              ? 'Partie NWC réelle active, wallet déconnecté : reconnecte le même wallet receive-only. Aucun fallback fictif.'
               : nwcMode === 'DIAGNOSTIC'
                 ? 'Wallet NWC connecté en diagnostic seulement. Sélectionne NWC automatique et arme explicitement la réception pour l’utiliser en partie.'
-                : 'Tu peux rester en mock, utiliser NWC receive-only, ou choisir un wallet Lightning externe avec confirmation manuelle.'}
+                : RUNTIME.allowMockPayments
+                  ? 'Tu peux rester en mock (dev), utiliser NWC receive-only, ou choisir un wallet Lightning externe avec confirmation manuelle.'
+                  : 'Connecte un wallet NWC receive-only pour l’automatique, ou choisis « Wallet externe manuel » pour encaisser via ton propre wallet avec confirmation.'}
           </p>
           <details className="wallet-help">
             <summary>NWC ou wallet externe : que choisir ?</summary>
             <p>NWC automatise la création et la vérification des invoices entrantes sans permission de dépense. Le mode wallet externe s’appuie sur les capacités Lightning disponibles : NOIOU tente une invoice exacte via Lightning Address/LNURL et utilise sinon une BOLT11 ponctuelle du montant exact.</p>
           </details>
         </div>
-        <span className={`state ${game?.lightningReceiveMode === 'EXTERNAL_WALLET_MANUAL' || nwcMode === 'LIVE_ARMED' ? 'paid' : 'pending'}`}>{game?.lightningReceiveMode === 'EXTERNAL_WALLET_MANUAL' ? 'EXTERNE' : nwcMode === 'LIVE_ARMED' ? 'NWC RÉEL' : nwcMode === 'RECONNECT_REQUIRED' ? 'RECONNECTER' : nwcMode === 'DIAGNOSTIC' ? 'DIAGNOSTIC' : 'MOCK'}</span>
+        <span className={`state ${game?.lightningReceiveMode === 'EXTERNAL_WALLET_MANUAL' || nwcMode === 'LIVE_ARMED' ? 'paid' : 'pending'}`}>{game?.lightningReceiveMode === 'EXTERNAL_WALLET_MANUAL' ? 'EXTERNE' : nwcRuntimeStateLabel(nwcMode, RUNTIME.allowMockPayments)}</span>
       </section>
 
       <details className="card donation donation-details">
         <summary>❤️ Soutenir NOIOU</summary>
         <div className="donation-details-body">
           <p>Dons volontaires, en sats, toujours hors cagnotte. Prototype : aucune transaction réelle pour les dons.</p>
-          <small>{projectDonations.length} don(s) mock · {totalDonations.toLocaleString('fr-FR')} sats au total</small>
-          {game?.status === 'CLOSED' ? <div className="donation-form"><label>Donateur (pseudo facultatif)<input value={donorLabel} onChange={(event) => setDonorLabel(event.target.value)} placeholder="Alice" /></label><label>Sats<input type="number" min="1" step="1" value={donationSats} onChange={(event) => setDonationSats(Number(event.target.value))} /></label><div className="actions">{[500, 1000, 5000].map((sats) => <button key={sats} onClick={() => setDonationSats(sats)}>{sats.toLocaleString('fr-FR')}</button>)}</div><button onClick={() => void execute(addEndDonation)}>⚡ Simuler le don</button></div> : <span className="muted">Un autre don pourra être proposé après clôture.</span>}
+          <small>{projectDonations.length} don(s) enregistrés · {totalDonations.toLocaleString('fr-FR')} sats au total</small>
+          {game?.status === 'CLOSED' ? <div className="donation-form"><label>Donateur (pseudo facultatif)<input value={donorLabel} onChange={(event) => setDonorLabel(event.target.value)} placeholder="Alice" /></label><label>Sats<input type="number" min="1" step="1" value={donationSats} onChange={(event) => setDonationSats(Number(event.target.value))} /></label><div className="actions">{[500, 1000, 5000].map((sats) => <button key={sats} onClick={() => setDonationSats(sats)}>{sats.toLocaleString('fr-FR')}</button>)}</div><button onClick={() => void execute(addEndDonation)}>⚡ Enregistrer le don (hors cagnotte)</button></div> : <span className="muted">Un autre don pourra être proposé après clôture.</span>}
         </div>
       </details>
 
