@@ -2,6 +2,7 @@ import { useEffect, useRef, useState } from 'react';
 import { createPortal } from 'react-dom';
 import { isPlayStarted, MIN_POKER_PLAYERS } from './lobby';
 import { buyInAttentionState, firstOutstandingBuyInPlayerId } from './lobbyGuidance';
+import { consumePostJoinLanding } from './postJoinLanding';
 import {
   loadSession,
   SESSION_CLEARED_EVENT,
@@ -116,6 +117,13 @@ export default function GuidedLobbyControl() {
     const frame = window.requestAnimationFrame(() => setPortalTarget(document.getElementById('add-player')));
     return () => window.cancelAnimationFrame(frame);
   }, [game?.id, players.length, phase]);
+
+  useEffect(() => {
+    if (typeof window === 'undefined' || !game || game.status !== 'OPEN' || !portalTarget || !phase) return;
+    const joinedPlayerId = consumePostJoinLanding(window.sessionStorage, game.id);
+    if (!joinedPlayerId) return;
+    scrollToTarget(phase === 'players' ? 'add-player' : `player-${joinedPlayerId}`);
+  }, [game?.id, game?.status, phase, portalTarget]);
 
   useEffect(() => {
     const gameId = game?.id ?? '';
