@@ -36,7 +36,7 @@ export function assertLiveGameInvoiceAmount(sats: number): void {
 
 export function assertRealNwcGameCurrency(currency: string | undefined): void {
   if (currency !== REAL_NWC_ALPHA_CURRENCY) {
-    throw new Error('Alpha NWC réel : les caves et rebuys réels sont autorisés uniquement pour une partie en SATS. Utilise le mode mock pour EUR/USD.');
+    throw new Error('Alpha NWC réel : les caves et rebuys réels sont autorisés uniquement pour une partie en SATS.');
   }
 }
 
@@ -135,7 +135,7 @@ export function NwcSessionProvider({ children }: { children: ReactNode }) {
         // The persisted active session is authoritative. This also lets an in-memory lock be
         // released after the game has been closed/reset without requiring a page reload.
         if (readActiveGameNwcLock()) {
-          throw new Error('Cette partie a déjà utilisé/validé le mode NWC réel : impossible de revenir au mock avant sa clôture/réinitialisation');
+          throw new Error('Cette partie a déjà utilisé/validé le mode NWC réel : impossible de revenir à un encaissement non NWC avant sa clôture/réinitialisation');
         }
         setLiveGameReceiptsArmed(false);
         setActiveGameLockedToNwc(false);

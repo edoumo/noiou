@@ -9,7 +9,7 @@ NOIOU is a local-first PWA for tracking money around a physical poker table. It 
 - React + TypeScript PWA client.
 - Domain logic kept framework-independent.
 - `LightningAdapter` boundary isolates wallet integrations from settlement logic.
-- `MockLightningAdapter` is the only adapter enabled during private bootstrap.
+- Receive flows: real receive-only NWC (automatic, explicit arming) and external wallet with manual BOLT11 receipt confirmation. The legacy mock adapter is a development/test tool, unavailable in production builds.
 - Persistence/backend are intentionally deferred until the local domain model and invariants are stable.
 
 ## Non-custodial boundary
@@ -46,7 +46,7 @@ This is not a blockchain and does not by itself make a malicious client trustwor
 
 ## Lightning boundary
 
-The business domain depends on `LightningAdapter`, not on LNbits or a specific wallet. The private bootstrap implements `MockLightningAdapter` with invoice creation, payment status, payment preparation and confirmation.
+The business domain depends on `LightningAdapter`, not on LNbits or a specific wallet. The production experience enables `NwcReceiveOnlyAdapter` (real receive-only invoices) and the external-wallet/manual receipt flow; `MockLightningAdapter` remains a development/test tool with no production UI exposure.
 
 Planned order for real integrations:
 

@@ -57,7 +57,7 @@ export default function NwcReceiveDiagnostic() {
   function disarm() {
     nwc.disarmLiveGameReceipts();
     setAcknowledged(false);
-    setStatus('Réception réelle désarmée. Les caves/rebuys Lightning reviennent au mock.');
+    setStatus('Réception réelle désarmée. Les caves/rebuys Lightning repassent en mode non armé (diagnostic uniquement).');
   }
 
   async function createInvoice() {
@@ -110,7 +110,7 @@ export default function NwcReceiveDiagnostic() {
 
         {!connection ? (
           <div className="nwc-connect-form">
-            {nwc.activeGameLockedToNwc && <div className="nwc-error" role="alert">Cette partie est déjà engagée en NWC réel. Reconnecte le wallet receive-only avant toute nouvelle cave/rebuy Lightning : NOIOU ne basculera pas en mock.</div>}
+            {nwc.activeGameLockedToNwc && <div className="nwc-error" role="alert">Cette partie est déjà engagée en NWC réel. Reconnecte le wallet receive-only avant toute nouvelle cave/rebuy Lightning : NOIOU n’utilisera jamais d’encaissement fictif.</div>}
             <label>
               URI NWC dédiée à NOIOU
               <input
@@ -154,7 +154,7 @@ export default function NwcReceiveDiagnostic() {
               <strong>{nwc.activeGameLockedToNwc ? 'Partie active verrouillée en NWC réel' : nwc.liveGameReceiptsArmed ? 'Caves réelles armées' : 'Caves réelles désarmées'}</strong>
               {nwc.activeGameLockedToNwc ? (
                 <>
-                  <small>Le retour au mock est bloqué tant que la session locale indique une partie NWC réelle active. Après clôture/réinitialisation, le bouton ci-dessous libère l’état en mémoire.</small>
+                  <small>Le retour à un autre mode de réception est bloqué tant que la session locale indique une partie NWC réelle active. Après clôture/réinitialisation, le bouton ci-dessous libère l’état en mémoire.</small>
                   <button onClick={() => void run(async () => disarm())}>Libérer le verrou après clôture/réinitialisation</button>
                 </>
               ) : !nwc.liveGameReceiptsArmed ? (
@@ -168,7 +168,7 @@ export default function NwcReceiveDiagnostic() {
               ) : (
                 <button onClick={() => void run(async () => disarm())}>Désarmer les caves réelles</button>
               )}
-              <small>L’armement initial est volatil et n’enregistre aucun secret NWC. Dès qu’une partie est engagée en NWC réel, le mode réel reste verrouillé pour empêcher un fallback mock silencieux.</small>
+              <small>L’armement initial est volatil et n’enregistre aucun secret NWC. Dès qu’une partie est engagée en NWC réel, le mode réel reste verrouillé pour empêcher tout basculement silencieux vers un encaissement fictif.</small>
             </div>
           </>
         )}
