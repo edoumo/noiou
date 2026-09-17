@@ -1,0 +1,172 @@
+/* UX25 — guided lobby: expose one phase at a time without removing late-join support. */
+:root[data-noiou-lobby-phase="players"] #collections {
+  display: none;
+}
+
+:root[data-noiou-lobby-phase="collections"] #add-player > .grid.player-form,
+:root[data-noiou-lobby-phase="collections"] #add-player > button.wide-mobile,
+:root[data-noiou-lobby-phase="play-collapsed"] #add-player > .grid.player-form,
+:root[data-noiou-lobby-phase="play-collapsed"] #add-player > button.wide-mobile {
+  display: none;
+}
+
+.lobby-director {
+  display: grid;
+  gap: 8px;
+  margin-top: 14px;
+  padding: 13px;
+  border: 1px solid #bfdbfe;
+  border-radius: 12px;
+  background: #eff6ff;
+}
+
+.lobby-director strong,
+.lobby-director small {
+  display: block;
+}
+
+.lobby-director small {
+  color: #475569;
+  line-height: 1.4;
+}
+
+.lobby-director .primary {
+  margin-top: 2px;
+}
+
+.lobby-director.compact {
+  grid-template-columns: minmax(0, 1fr) auto;
+  align-items: center;
+}
+
+.lobby-director.compact strong,
+.lobby-director.compact small {
+  grid-column: 1;
+}
+
+.lobby-director.compact button {
+  grid-column: 2;
+  grid-row: 1 / span 2;
+}
+
+.player-box.collection-action-required,
+.player-box.collection-action-pending {
+  position: relative;
+  margin: 10px 0;
+  padding: 14px 12px;
+  border-radius: 12px;
+}
+
+.player-box.collection-action-required {
+  background: #fff7ed;
+  box-shadow: inset 4px 0 #f59e0b;
+}
+
+.player-box.collection-action-pending {
+  background: #fffbeb;
+  box-shadow: inset 4px 0 #eab308;
+}
+
+.player-box.collection-action-required::before,
+.player-box.collection-action-pending::before {
+  display: inline-flex;
+  margin: 0 0 8px 4px;
+  padding: 4px 8px;
+  border-radius: 999px;
+  font-size: .72rem;
+  font-weight: 900;
+  letter-spacing: .02em;
+}
+
+.player-box.collection-action-required::before {
+  content: "À encaisser";
+  background: #ffedd5;
+  color: #9a3412;
+}
+
+.player-box.collection-action-pending::before {
+  content: "Paiement à confirmer";
+  background: #fef3c7;
+  color: #92400e;
+}
+
+.nwc-diagnostic-shell {
+  max-width: 820px;
+  margin: 18px auto 64px;
+  border: 1px solid #cbd5e1;
+  border-radius: 16px;
+  background: #fff;
+  overflow: hidden;
+}
+
+.nwc-diagnostic-shell > summary {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+  padding: 14px 16px;
+  cursor: pointer;
+  font-weight: 800;
+  list-style-position: inside;
+}
+
+.nwc-diagnostic-shell > summary small {
+  color: #64748b;
+  font-weight: 600;
+}
+
+.nwc-diagnostic-shell .nwc-diagnostic {
+  margin: 0;
+  border: 0;
+  border-top: 1px solid #334155;
+  border-radius: 0;
+  box-shadow: none;
+}
+
+@media (max-width: 640px) {
+  .lobby-director.compact {
+    grid-template-columns: 1fr;
+  }
+
+  .lobby-director.compact button {
+    grid-column: 1;
+    grid-row: auto;
+    width: 100%;
+  }
+
+  .nwc-diagnostic-shell {
+    margin: 14px 16px 48px;
+  }
+
+  .nwc-diagnostic-shell > summary {
+    align-items: flex-start;
+    flex-direction: column;
+  }
+}
+
+:root[data-theme="dark"] .lobby-director {
+  background: #172554;
+  border-color: #1d4ed8;
+}
+
+:root[data-theme="dark"] .lobby-director small {
+  color: #bfdbfe;
+}
+
+:root[data-theme="dark"] .player-box.collection-action-required {
+  background: #431407;
+}
+
+:root[data-theme="dark"] .player-box.collection-action-pending {
+  background: #422006;
+}
+
+:root[data-theme="dark"] .nwc-diagnostic-shell {
+  background: #0f172a;
+  color: #e5e7eb;
+  border-color: #334155;
+}
+
+:root[data-theme="dark"] .nwc-diagnostic-shell > summary small {
+  color: #94a3b8;
+}
