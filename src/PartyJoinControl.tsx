@@ -13,6 +13,7 @@ import {
   parsePartyJoinResponse,
   type PartyInvite,
 } from './partyJoin';
+import { storePostJoinLanding } from './postJoinLanding';
 import QrCameraScanner from './QrCameraScanner';
 import { decodeQrImageFile } from './qrImageImport';
 import { loadSession, saveSession } from './session';
@@ -149,6 +150,7 @@ export default function PartyJoinControl() {
         players: [...snapshot.players, player],
         ledger: [...snapshot.ledger, ledgerEvent],
       };
+      storePostJoinLanding(window.sessionStorage, snapshot.game.id, player.id);
       saveSession(window.localStorage, next);
       window.location.reload();
     } catch (caught) {
