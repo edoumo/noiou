@@ -1,4 +1,4 @@
-import { useState } from 'react';
+import { useEffect, useState } from 'react';
 import LightningInvoiceCard from './LightningInvoiceCard';
 import type { LightningInvoice } from './lightning';
 import { useNwcSession } from './NwcSessionContext';
@@ -13,6 +13,7 @@ export default function NwcReceiveDiagnostic() {
   const [error, setError] = useState('');
   const [busy, setBusy] = useState(false);
   const [acknowledged, setAcknowledged] = useState(false);
+  const [expanded, setExpanded] = useState(() => Boolean(nwc.connection || nwc.activeGameLockedToNwc || nwc.liveGameReceiptsArmed));
 
   async function run(action: () => Promise<void>) {
     try {
@@ -84,8 +85,12 @@ export default function NwcReceiveDiagnostic() {
       : 'DIAGNOSTIC';
   const keepOpen = Boolean(connection || nwc.activeGameLockedToNwc || nwc.liveGameReceiptsArmed);
 
+  useEffect(() => {
+    if (keepOpen) setExpanded(true);
+  }, [keepOpen]);
+
   return (
-    <details className="nwc-diagnostic-shell" defaultOpen={keepOpen} key={keepOpen ? 'nwc-active' : 'nwc-optional'}>
+    <details className="nwc-diagnostic-shell" open={expanded} onToggle={(event) => setExpanded(event.currentTarget.open)}>
       <summary>
         <span>⚙️ NWC réception seule</span>
         <small>{keepOpen ? gameModeLabel : 'Option · ouvrir uniquement si tu utilises NWC automatique'}</small>
