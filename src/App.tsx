@@ -384,7 +384,6 @@ export default function App() {
       reusableLightningDestination: Boolean(player.lightningAddress),
       isOrganizer: Boolean(player.isOrganizer),
     });
-    scrollToTarget('add-player');
   }
 
   function hasPaidBuyIn(playerId: string): boolean {
