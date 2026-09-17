@@ -126,17 +126,23 @@ export default function GuidedLobbyControl() {
       return;
     }
 
-    if (players.length > previousPlayerCount.current && editingPlayers && game?.status === 'OPEN') {
+    const playerAdded = players.length > previousPlayerCount.current;
+    if (playerAdded && game?.status === 'OPEN') {
       const newestPlayer = players[players.length - 1];
       setEditingPlayers(false);
-      if (!playStarted) {
-        storeReadyGameId(game.id);
-        setReadyGameId(game.id);
+
+      if (!playStarted && !rosterReady) {
+        scrollToTarget('add-player');
+      } else {
+        if (!playStarted) {
+          storeReadyGameId(game.id);
+          setReadyGameId(game.id);
+        }
+        if (newestPlayer) scrollToTarget(`player-${newestPlayer.id}`);
       }
-      if (newestPlayer) scrollToTarget(`player-${newestPlayer.id}`);
     }
     previousPlayerCount.current = players.length;
-  }, [game?.id, game?.status, players, editingPlayers, playStarted]);
+  }, [game?.id, game?.status, players, playStarted, rosterReady]);
 
   if (!game || game.status !== 'OPEN' || !portalTarget) return null;
 
