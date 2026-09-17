@@ -3,6 +3,7 @@ import type { LightningInvoice } from './lightning';
 
 export const SESSION_STORAGE_KEY = 'noiou.session.v1';
 export const SESSION_SCHEMA_VERSION = 1 as const;
+export const SESSION_SAVED_EVENT = 'noiou:session-saved';
 export const SESSION_CLEARED_EVENT = 'noiou:session-cleared';
 
 export interface SessionSnapshot {
@@ -78,6 +79,9 @@ export function loadSession(storage: SessionStorageReader): SessionSnapshot | nu
 
 export function saveSession(storage: SessionStorageWriter, snapshot: SessionSnapshot): void {
   storage.setItem(SESSION_STORAGE_KEY, serializeSession(snapshot));
+  if (typeof window !== 'undefined' && storage === window.localStorage) {
+    window.dispatchEvent(new Event(SESSION_SAVED_EVENT));
+  }
 }
 
 export function clearSession(storage: SessionStorageWriter): void {

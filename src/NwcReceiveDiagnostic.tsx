@@ -1,4 +1,4 @@
-import { useState } from 'react';
+import { useEffect, useState } from 'react';
 import LightningInvoiceCard from './LightningInvoiceCard';
 import type { LightningInvoice } from './lightning';
 import { useNwcSession } from './NwcSessionContext';
@@ -13,6 +13,7 @@ export default function NwcReceiveDiagnostic() {
   const [error, setError] = useState('');
   const [busy, setBusy] = useState(false);
   const [acknowledged, setAcknowledged] = useState(false);
+  const [expanded, setExpanded] = useState(() => Boolean(nwc.connection || nwc.activeGameLockedToNwc || nwc.liveGameReceiptsArmed));
 
   async function run(action: () => Promise<void>) {
     try {
@@ -82,92 +83,103 @@ export default function NwcReceiveDiagnostic() {
     : nwc.liveGameReceiptsArmed
       ? 'RÉEL ARMÉ'
       : 'DIAGNOSTIC';
+  const keepOpen = Boolean(connection || nwc.activeGameLockedToNwc || nwc.liveGameReceiptsArmed);
+
+  useEffect(() => {
+    if (keepOpen) setExpanded(true);
+  }, [keepOpen]);
 
   return (
-    <section className="nwc-diagnostic" aria-labelledby="nwc-live-title">
-      <div className="nwc-diagnostic-heading">
-        <div>
-          <p className="nwc-kicker">Connexion privée · réception Lightning réelle</p>
-          <h2 id="nwc-live-title">NWC réception seule</h2>
-          <p>
-            La connexion peut servir aux diagnostics et, seulement après armement explicite, aux caves/rebuys réels.
-            NOIOU refuse toute permission de paiement sortant.
-          </p>
-        </div>
-        <span className={connection ? 'nwc-live' : 'nwc-off'}>{connection ? gameModeLabel : (nwc.activeGameLockedToNwc ? 'RECONNEXION REQUISE' : 'DÉCONNECTÉ')}</span>
-      </div>
-
-      {!connection ? (
-        <div className="nwc-connect-form">
-          {nwc.activeGameLockedToNwc && <div className="nwc-error" role="alert">Cette partie est déjà engagée en NWC réel. Reconnecte le wallet receive-only avant toute nouvelle cave/rebuy Lightning : NOIOU ne basculera pas en mock.</div>}
-          <label>
-            URI NWC dédiée à NOIOU
-            <input
-              type="password"
-              value={uri}
-              onChange={(event) => setUri(event.target.value)}
-              placeholder="nostr+walletconnect://…"
-              autoComplete="off"
-              autoCapitalize="none"
-              spellCheck={false}
-              disabled={busy}
-            />
-          </label>
-          <button disabled={busy || !uri.trim()} onClick={() => void run(connect)}>Connecter en réception seule</button>
-          <small>
-            Utilise une connexion limitée à <code>get_info</code>, <code>make_invoice</code> et <code>lookup_invoice</code>.
-            L’URI est effacée du champ dès la tentative de connexion et n’est ni journalisée, ni sauvegardée, ni exportée.
-          </small>
-        </div>
-      ) : (
-        <>
-          <div className="nwc-wallet-summary">
-            <div><strong>{connection.alias || 'Wallet NWC'}</strong><small>{connection.network || 'réseau non indiqué'}</small></div>
-            <div><strong>{connection.relays.length}</strong><small>relay(s) WSS</small></div>
-            <div><strong>{connection.methods.length}</strong><small>permission(s)</small></div>
-            <button onClick={disconnect}>Déconnecter</button>
+    <details className="nwc-diagnostic-shell" open={expanded} onToggle={(event) => setExpanded(event.currentTarget.open)}>
+      <summary>
+        <span>⚙️ NWC réception seule</span>
+        <small>{keepOpen ? gameModeLabel : 'Option · ouvrir uniquement si tu utilises NWC automatique'}</small>
+      </summary>
+      <section className="nwc-diagnostic" aria-labelledby="nwc-live-title">
+        <div className="nwc-diagnostic-heading">
+          <div>
+            <p className="nwc-kicker">Connexion privée · réception Lightning réelle</p>
+            <h2 id="nwc-live-title">NWC réception seule</h2>
+            <p>
+              La connexion peut servir aux diagnostics et, seulement après armement explicite, aux caves/rebuys réels.
+              NOIOU refuse toute permission de paiement sortant.
+            </p>
           </div>
+          <span className={connection ? 'nwc-live' : 'nwc-off'}>{connection ? gameModeLabel : (nwc.activeGameLockedToNwc ? 'RECONNEXION REQUISE' : 'DÉCONNECTÉ')}</span>
+        </div>
 
-          <div className="nwc-test-box">
+        {!connection ? (
+          <div className="nwc-connect-form">
+            {nwc.activeGameLockedToNwc && <div className="nwc-error" role="alert">Cette partie est déjà engagée en NWC réel. Reconnecte le wallet receive-only avant toute nouvelle cave/rebuy Lightning : NOIOU ne basculera pas en mock.</div>}
             <label>
-              Montant du test diagnostic
-              <div className="nwc-amount"><input type="number" min="1" max="1000" step="1" value={amountSats} onChange={(event) => setAmountSats(Number(event.target.value))} /><span>sats</span></div>
+              URI NWC dédiée à NOIOU
+              <input
+                type="password"
+                value={uri}
+                onChange={(event) => setUri(event.target.value)}
+                placeholder="nostr+walletconnect://…"
+                autoComplete="off"
+                autoCapitalize="none"
+                spellCheck={false}
+                disabled={busy}
+              />
             </label>
-            <button disabled={busy} onClick={() => void run(createInvoice)}>Créer une invoice réelle de diagnostic</button>
-            <small>Ce paiement crédite réellement le wallet connecté, mais reste hors cagnotte. Le diagnostic est plafonné à 1000 sats.</small>
+            <button disabled={busy || !uri.trim()} onClick={() => void run(connect)}>Connecter en réception seule</button>
+            <small>
+              Utilise une connexion limitée à <code>get_info</code>, <code>make_invoice</code> et <code>lookup_invoice</code>.
+              L’URI est effacée du champ dès la tentative de connexion et n’est ni journalisée, ni sauvegardée, ni exportée.
+            </small>
           </div>
+        ) : (
+          <>
+            <div className="nwc-wallet-summary">
+              <div><strong>{connection.alias || 'Wallet NWC'}</strong><small>{connection.network || 'réseau non indiqué'}</small></div>
+              <div><strong>{connection.relays.length}</strong><small>relay(s) WSS</small></div>
+              <div><strong>{connection.methods.length}</strong><small>permission(s)</small></div>
+              <button onClick={disconnect}>Déconnecter</button>
+            </div>
 
-          {invoice && <LightningInvoiceCard invoice={invoice} onSimulatePaid={() => void run(checkInvoice)} />}
+            <div className="nwc-test-box">
+              <label>
+                Montant du test diagnostic
+                <div className="nwc-amount"><input type="number" min="1" max="1000" step="1" value={amountSats} onChange={(event) => setAmountSats(Number(event.target.value))} /><span>sats</span></div>
+              </label>
+              <button disabled={busy} onClick={() => void run(createInvoice)}>Créer une invoice réelle de diagnostic</button>
+              <small>Ce paiement crédite réellement le wallet connecté, mais reste hors cagnotte. Le diagnostic est plafonné à 1000 sats.</small>
+            </div>
 
-          <div className="nwc-test-box">
-            <strong>{nwc.activeGameLockedToNwc ? 'Partie active verrouillée en NWC réel' : nwc.liveGameReceiptsArmed ? 'Caves réelles armées' : 'Caves réelles désarmées'}</strong>
-            {nwc.activeGameLockedToNwc ? (
-              <>
-                <small>Le retour au mock est bloqué tant que la session locale indique une partie NWC réelle active. Après clôture/réinitialisation, le bouton ci-dessous libère l’état en mémoire.</small>
-                <button onClick={() => void run(async () => disarm())}>Libérer le verrou après clôture/réinitialisation</button>
-              </>
-            ) : !nwc.liveGameReceiptsArmed ? (
-              <>
-                <label className="check">
-                  <input type="checkbox" checked={acknowledged} onChange={(event) => setAcknowledged(event.target.checked)} />
-                  Je comprends que les prochaines caves/rebuys Lightning créeront de vraies invoices et créditeront réellement le wallet connecté.
-                </label>
-                <button disabled={!acknowledged} onClick={() => void run(async () => arm())}>Armer les caves réelles</button>
-              </>
-            ) : (
-              <button onClick={() => void run(async () => disarm())}>Désarmer les caves réelles</button>
-            )}
-            <small>L’armement initial est volatil et n’enregistre aucun secret NWC. Dès qu’une partie est engagée en NWC réel, le mode réel reste verrouillé pour empêcher un fallback mock silencieux.</small>
-          </div>
-        </>
-      )}
+            {invoice && <LightningInvoiceCard invoice={invoice} onSimulatePaid={() => void run(checkInvoice)} />}
 
-      {status && <div className="nwc-status">{status}</div>}
-      {error && <div className="nwc-error" role="alert">{error}</div>}
+            <div className="nwc-test-box">
+              <strong>{nwc.activeGameLockedToNwc ? 'Partie active verrouillée en NWC réel' : nwc.liveGameReceiptsArmed ? 'Caves réelles armées' : 'Caves réelles désarmées'}</strong>
+              {nwc.activeGameLockedToNwc ? (
+                <>
+                  <small>Le retour au mock est bloqué tant que la session locale indique une partie NWC réelle active. Après clôture/réinitialisation, le bouton ci-dessous libère l’état en mémoire.</small>
+                  <button onClick={() => void run(async () => disarm())}>Libérer le verrou après clôture/réinitialisation</button>
+                </>
+              ) : !nwc.liveGameReceiptsArmed ? (
+                <>
+                  <label className="check">
+                    <input type="checkbox" checked={acknowledged} onChange={(event) => setAcknowledged(event.target.checked)} />
+                    Je comprends que les prochaines caves/rebuys Lightning créeront de vraies invoices et créditeront réellement le wallet connecté.
+                  </label>
+                  <button disabled={!acknowledged} onClick={() => void run(async () => arm())}>Armer les caves réelles</button>
+                </>
+              ) : (
+                <button onClick={() => void run(async () => disarm())}>Désarmer les caves réelles</button>
+              )}
+              <small>L’armement initial est volatil et n’enregistre aucun secret NWC. Dès qu’une partie est engagée en NWC réel, le mode réel reste verrouillé pour empêcher un fallback mock silencieux.</small>
+            </div>
+          </>
+        )}
 
-      <div className="nwc-boundary">
-        <strong>Limite maintenue :</strong> aucun payout Lightning n’est exécuté par NOIOU. Les sorties restent manuelles dans le wallet de l’organisateur.
-      </div>
-    </section>
+        {status && <div className="nwc-status">{status}</div>}
+        {error && <div className="nwc-error" role="alert">{error}</div>}
+
+        <div className="nwc-boundary">
+          <strong>Limite maintenue :</strong> aucun payout Lightning n’est exécuté par NOIOU. Les sorties restent manuelles dans le wallet de l’organisateur.
+        </div>
+      </section>
+    </details>
   );
 }
