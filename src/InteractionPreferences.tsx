@@ -32,13 +32,15 @@ function playTone(context: AudioContext, frequency: number, durationMs: number, 
 
 export default function InteractionPreferences() {
   const [preferences, setPreferences] = useState<UserPreferences>(() => readPreferences());
+  const languageCatalogReady = !import.meta.env.PROD;
+  const effectiveLocale: SupportedLocale = languageCatalogReady ? preferences.locale : 'fr-FR';
   const audioContextRef = useRef<AudioContext | null>(null);
 
   useEffect(() => {
     if (typeof window === 'undefined') return;
     saveUserPreferences(window.localStorage, preferences);
-    document.documentElement.lang = preferences.locale;
-  }, [preferences]);
+    document.documentElement.lang = effectiveLocale;
+  }, [preferences, effectiveLocale]);
 
   useEffect(() => {
     if (typeof document === 'undefined') return;
@@ -87,19 +89,21 @@ export default function InteractionPreferences() {
 
   return (
     <details className="global-preferences">
-      <summary>⚙ {preferenceText(preferences.locale, 'settings')}</summary>
+      <summary>⚙ {preferenceText(effectiveLocale, 'settings')}</summary>
       <div className="global-preferences-panel">
-        <label>{preferenceText(preferences.locale, 'language')}
-          <select
-            value={preferences.locale}
-            onChange={(event) => update({ locale: event.target.value as SupportedLocale })}
-          >
-            {SUPPORTED_LOCALES.map((locale) => (
-              <option key={locale.code} value={locale.code}>{locale.flag} {locale.name}</option>
-            ))}
-          </select>
-        </label>
-        <small>{preferenceText(preferences.locale, 'languageNote')}</small>
+        {languageCatalogReady && <>
+          <label>{preferenceText(effectiveLocale, 'language')}
+            <select
+              value={preferences.locale}
+              onChange={(event) => update({ locale: event.target.value as SupportedLocale })}
+            >
+              {SUPPORTED_LOCALES.map((locale) => (
+                <option key={locale.code} value={locale.code}>{locale.flag} {locale.name}</option>
+              ))}
+            </select>
+          </label>
+          <small>{preferenceText(effectiveLocale, 'languageNote')}</small>
+        </>}
 
         <label className="preference-toggle">
           <input
@@ -107,7 +111,7 @@ export default function InteractionPreferences() {
             checked={preferences.vibrateOnPress}
             onChange={(event) => update({ vibrateOnPress: event.target.checked })}
           />
-          <span><strong>{preferenceText(preferences.locale, 'vibration')}</strong><small>{preferenceText(preferences.locale, 'vibrationNote')}</small></span>
+          <span><strong>{preferenceText(effectiveLocale, 'vibration')}</strong><small>{preferenceText(effectiveLocale, 'vibrationNote')}</small></span>
         </label>
 
         <label className="preference-toggle">
@@ -116,7 +120,7 @@ export default function InteractionPreferences() {
             checked={preferences.clickSound}
             onChange={(event) => update({ clickSound: event.target.checked })}
           />
-          <span><strong>{preferenceText(preferences.locale, 'clickSound')}</strong><small>{preferenceText(preferences.locale, 'clickSoundNote')}</small></span>
+          <span><strong>{preferenceText(effectiveLocale, 'clickSound')}</strong><small>{preferenceText(effectiveLocale, 'clickSoundNote')}</small></span>
         </label>
 
         <label className="preference-toggle">
@@ -125,7 +129,7 @@ export default function InteractionPreferences() {
             checked={preferences.financialSound}
             onChange={(event) => update({ financialSound: event.target.checked })}
           />
-          <span><strong>{preferenceText(preferences.locale, 'financialSound')}</strong><small>{preferenceText(preferences.locale, 'financialSoundNote')}</small></span>
+          <span><strong>{preferenceText(effectiveLocale, 'financialSound')}</strong><small>{preferenceText(effectiveLocale, 'financialSoundNote')}</small></span>
         </label>
       </div>
     </details>
