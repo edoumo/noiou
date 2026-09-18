@@ -4,7 +4,7 @@ Open-source settlement companion for **physical** poker games. It does not deal 
 
 - Application: <https://app.noiou.io>
 - Website: <https://noiou.io>
-- License: MIT
+- License: AGPL-3.0-or-later
 
 ## V1 principles
 
@@ -74,4 +74,6 @@ See also `docs/V1_SCOPE.md`, `ARCHITECTURE.md`, `SECURITY.md` and `docs/REGULATO
 
 ## License
 
-MIT — see [LICENSE](LICENSE).
+GNU AGPL v3 or later — see [LICENSE](LICENSE).
+
+The NOIOU name, logo and project identity are **not** licensed under the AGPL. See [TRADEMARK.md](TRADEMARK.md). Forks and modified versions must not present themselves as the official NOIOU application.
