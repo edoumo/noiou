@@ -503,7 +503,7 @@ export const en_GB: Record<TranslationKey, string> = {
   'nwcDiag.armed.note': 'The initial arming is volatile and stores no NWC secret. As soon as a game is committed to live NWC, live mode stays locked to prevent any silent switch to simulated collection.',
   'nwcDiag.armed.release': 'Release the lock after closing/resetting',
   'nwcDiag.armedStatus': 'Real reception armed. The next Lightning buy-ins/rebuy will use NWC.',
-  'nwcDiag.boundary': 'Boundary maintained: NOIOU executes no Lightning payout. Outgoing payments remain manual in the organiser’s wallet.',
+  'nwcDiag.boundary': 'NOIOU executes no Lightning payout. Outgoing payments remain manual in the organiser’s wallet.',
   'nwcDiag.boundaryStrong': 'Limit maintained:',
   'nwcDiag.connect': 'Connect in receive-only mode',
   'nwcDiag.connectFirst': 'First connect an NWC receive-only wallet',

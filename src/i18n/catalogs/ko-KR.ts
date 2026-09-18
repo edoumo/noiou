@@ -503,7 +503,7 @@ export const ko_KR: Record<TranslationKey, string> = {
   'nwcDiag.armed.note': '최초 활성화는 휘발성이며 NWC 비밀 정보를 저장하지 않습니다. 게임이 실제 NWC로 시작되면, 가상 수금으로의 조용한 전환을 막기 위해 실제 모드가 계속 잠깁니다.',
   'nwcDiag.armed.release': '종료/초기화 후 잠금 해제',
   'nwcDiag.armedStatus': '실제 수신이 활성화되었습니다. 이후의 Lightning 바이인/리바이(rebuy)는 NWC를 사용합니다.',
-  'nwcDiag.boundary': '경계 유지: NOIOU는 Lightning 페이아웃을 실행하지 않습니다. 출금은 오거나이저 지갑에서 수동으로 처리됩니다.',
+  'nwcDiag.boundary': 'NOIOU는 Lightning 페이아웃을 실행하지 않습니다. 출금은 오거나이저 지갑에서 수동으로 처리됩니다.',
   'nwcDiag.boundaryStrong': '경계 유지:',
   'nwcDiag.connect': '수신 전용으로 연결',
   'nwcDiag.connectFirst': '먼저 수신 전용 NWC 지갑을 연결하세요',

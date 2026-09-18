@@ -503,7 +503,7 @@ export const da_DK: Record<TranslationKey, string> = {
   'nwcDiag.armed.note': 'Den første aktivering er flygtig og gemmer ingen NWC-hemmeligheder. Så snart et spil er i gang med ægte NWC, forbliver den ægte tilstand låst for at forhindre ethvert tavst skift til fiktiv indkassering.',
   'nwcDiag.armed.release': 'Frigiv låsen efter afslutning/nulstilling',
   'nwcDiag.armedStatus': 'Rigtig modtagelse aktiveret. De næste Lightning buy-ins/rebuys bruger NWC.',
-  'nwcDiag.boundary': 'Grænsen holdes: Ingen Lightning-payout udføres af NOIOU. Udbetalinger forbliver manuelle i arrangørens wallet.',
+  'nwcDiag.boundary': 'ingen Lightning-payout udføres af NOIOU. Udbetalinger forbliver manuelle i arrangørens wallet.',
   'nwcDiag.boundaryStrong': 'Grænse opretholdt:',
   'nwcDiag.connect': 'Forbind kun til modtagelse',
   'nwcDiag.connectFirst': 'Forbind først en NWC kun-modtagelse-wallet',

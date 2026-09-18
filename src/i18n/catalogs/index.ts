@@ -10,12 +10,14 @@
  * incomplete language out of production.
  */
 import type { Catalog } from '../types';
-import { frFRCatalog } from './fr-FR';
+import { bg_BG } from './bg-BG';
 import { da_DK } from './da-DK';
 import { de_DE } from './de-DE';
+import { el_GR } from './el-GR';
 import { en_GB } from './en-GB';
 import { es_ES } from './es-ES';
 import { fi_FI } from './fi-FI';
+import { frFRCatalog } from './fr-FR';
 import { hr_HR } from './hr-HR';
 import { hu_HU } from './hu-HU';
 import { it_IT } from './it-IT';
@@ -32,6 +34,8 @@ export const catalogs: Record<string, Catalog> = {
   'pt-PT': pt_PT,
   'da-DK': da_DK,
   'hr-HR': hr_HR,
+  'bg-BG': bg_BG,
+  'el-GR': el_GR,
   'fi-FI': fi_FI,
   'hu-HU': hu_HU,
   'ja-JP': ja_JP,

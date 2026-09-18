@@ -503,7 +503,7 @@ export const it_IT: Record<TranslationKey, string> = {
   'nwcDiag.armed.note': 'L\'attivazione iniziale è volatile e non memorizza alcun segreto NWC. Non appena una partita è impegnata in NWC reale, la modalità reale resta bloccata per impedire qualsiasi passaggio silenzioso a un incasso fittizio.',
   'nwcDiag.armed.release': 'Rilascia il blocco dopo chiusura/reimpostazione',
   'nwcDiag.armedStatus': 'Ricezione reale armata. Le prossime cave/recave (rebuys) Lightning useranno NWC.',
-  'nwcDiag.boundary': 'Limite mantenuto: NOIOU non esegue alcun payout Lightning. Le uscite restano manuali nel wallet dell\'organizzatore.',
+  'nwcDiag.boundary': 'NOIOU non esegue alcun payout Lightning. Le uscite restano manuali nel wallet dell’organizzatore.',
   'nwcDiag.boundaryStrong': 'Limite mantenuto:',
   'nwcDiag.connect': 'Connetti in sola ricezione',
   'nwcDiag.connectFirst': 'Collega prima un wallet NWC solo-ricezione',

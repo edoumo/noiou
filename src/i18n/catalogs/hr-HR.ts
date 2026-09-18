@@ -503,7 +503,7 @@ export const hr_HR: Record<TranslationKey, string> = {
   'nwcDiag.armed.note': 'Početno aktiviranje je prolazno i ne pohranjuje nikakvu NWC tajnu. Čim je igra pokrenuta sa stvarnim NWC-om, stvarni način ostaje zaključan kako bi se spriječio svaki tihi prelazak na lažnu naplatu.',
   'nwcDiag.armed.release': 'Oslobodi zaključavanje nakon zatvaranja/ponovnog postavljanja',
   'nwcDiag.armedStatus': 'Pravo primanje aktivirano. Sljedeći Lightning buy-ini/rebuyi koristit će NWC.',
-  'nwcDiag.boundary': 'Granica se održava: NOIOU ne izvršava nikakvu Lightning isplatu. Isplate ostaju ručne u novčaniku organizatora.',
+  'nwcDiag.boundary': 'NOIOU ne izvršava nikakvu Lightning isplatu. Isplate ostaju ručne u novčaniku organizatora.',
   'nwcDiag.boundaryStrong': 'Ograničenje zadržano:',
   'nwcDiag.connect': 'Poveži samo za primanje',
   'nwcDiag.connectFirst': 'Najprije poveži NWC novčanik samo za primanje',

@@ -503,7 +503,7 @@ export const ja_JP: Record<TranslationKey, string> = {
   'nwcDiag.armed.note': '初回の有効化は一時的で、NWC のシークレットは一切保存されません。ゲームが実際の NWC で開始された時点で、架空の集金への無言の切り替えを防ぐため、実際モードはロックされたままになります。',
   'nwcDiag.armed.release': '終了・リセット後にロックを解放',
   'nwcDiag.armedStatus': '実際の受信を有効化しました。以後の Lightning バイイン・リバイ (rebuys) は NWC を使用します。',
-  'nwcDiag.boundary': '境界は維持されます: NOIOU は Lightning のペイアウトを一切実行しません。出金はオーガナイザーのウォレットで手動のままです。',
+  'nwcDiag.boundary': 'NOIOU は Lightning のペイアウトを一切実行しません。出金はオーガナイザーのウォレットで手動のままです。',
   'nwcDiag.boundaryStrong': '境界は維持されます:',
   'nwcDiag.connect': '受信専用で接続',
   'nwcDiag.connectFirst': 'まず受信専用の NWC ウォレットを接続してください',

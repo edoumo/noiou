@@ -67,6 +67,8 @@ export const PUBLIC_LOCALE_CODES = [
   'pt-PT',
   'da-DK',
   'hr-HR',
+  'bg-BG',
+  'el-GR',
   'fi-FI',
   'hu-HU',
   'ja-JP',

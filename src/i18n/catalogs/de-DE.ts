@@ -503,7 +503,7 @@ export const de_DE: Record<TranslationKey, string> = {
   'nwcDiag.armed.note': 'Die anfängliche Aktivierung ist flüchtig und speichert kein NWC-Secret. Sobald ein Spiel auf reales NWC festgelegt ist, bleibt der reale Modus gesperrt, um jeden stillen Wechsel zu einem fiktiven Zahlungseingang zu verhindern.',
   'nwcDiag.armed.release': 'Sperre nach Abschluss/Zurücksetzen freigeben',
   'nwcDiag.armedStatus': 'Echter Empfang scharf geschaltet. Die nächsten Lightning-Buy-ins/Rebuys nutzen NWC.',
-  'nwcDiag.boundary': 'Grenze bleibt gewahrt: NOIOU führt keinen Lightning-Payout aus. Ausgänge bleiben manuell im Wallet des Veranstalters.',
+  'nwcDiag.boundary': 'NOIOU führt keinen Lightning-Payout aus. Ausgänge bleiben manuell im Wallet des Veranstalters.',
   'nwcDiag.boundaryStrong': 'Grenze bleibt bestehen:',
   'nwcDiag.connect': 'Nur im Empfangsmodus verbinden',
   'nwcDiag.connectFirst': 'Verbinde zuerst eine NWC-Receive-only-Wallet',

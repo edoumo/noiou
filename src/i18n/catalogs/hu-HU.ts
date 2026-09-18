@@ -503,7 +503,7 @@ export const hu_HU: Record<TranslationKey, string> = {
   'nwcDiag.armed.note': 'A kezdeti bekapcsolás illékony, és nem rögzít NWC-titkot. Amint egy játék valós NWC-módban indul, a valós mód rögzítve marad, hogy megakadályozza a csendes átváltást fiktív beszedésre.',
   'nwcDiag.armed.release': 'Zárolás feloldása lezárás/visszaállítás után',
   'nwcDiag.armedStatus': 'Valós fogadás bekapcsolva. A következő Lightning-nevezési díjak és újravásárlások (rebuy) NWC-t használnak.',
-  'nwcDiag.boundary': 'A korlát fenntartva: a NOIOU nem hajt végre Lightning-payoutot. A kifizetések a szervező tárcájában manuálisak maradnak.',
+  'nwcDiag.boundary': 'a NOIOU nem hajt végre Lightning-payoutot. A kifizetések a szervező tárcájában manuálisak maradnak.',
   'nwcDiag.boundaryStrong': 'A korlát fenntartva:',
   'nwcDiag.connect': 'Csatlakozás csak fogadásra',
   'nwcDiag.connectFirst': 'Először csatlakoztass egy csak fogadásra jogosult NWC-tárcát',

@@ -76,11 +76,11 @@ export function I18nProvider({ children, storage, initialLocale }: I18nProviderP
     document.documentElement.lang = locale;
   }, [locale]);
 
-  // Mirror the active locale into the engine so user-facing errors thrown by
-  // pure modules (validators, Lightning helpers) follow the same language.
-  useEffect(() => {
-    setActiveLocale(locale);
-  }, [locale]);
+  // Mirror the active locale into the engine synchronously, BEFORE children
+  // render. Pure helpers (receiveModeLabel, nwcRuntimeStateLabel, validators)
+  // read the module-level locale during render, so an effect would be one
+  // render too late and would leave their copy in the previous language.
+  setActiveLocale(locale);
 
   const setLocale = useCallback((next: LocaleCode) => {
     // Hard gate: an incomplete locale can never be activated at runtime.

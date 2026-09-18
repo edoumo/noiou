@@ -503,7 +503,7 @@ export const fi_FI: Record<TranslationKey, string> = {
   'nwcDiag.armed.note': 'Alkuperäinen käyttöönotto on väliaikainen eikä tallenna mitään NWC-salaisuutta. Heti kun peli on käytössä todellisella NWC:llä, todellinen tila pysyy lukittuna, jotta hiljainen siirtyminen kuvitteelliseen perintään estyy.',
   'nwcDiag.armed.release': 'Vapauta lukitus päättymisen tai nollauksen jälkeen',
   'nwcDiag.armedStatus': 'Todellinen vastaanotto käytössä. Seuraavat Lightning-sisäänostot ja uudelleenostot (rebuyt) käyttävät NWC:tä.',
-  'nwcDiag.boundary': 'Raja pysyy: NOIOU ei suorita yhtään Lightning-payoutia. Maksut pysyvät manuaalisina järjestäjän lompakossa.',
+  'nwcDiag.boundary': 'NOIOU ei suorita yhtään Lightning-payoutia. Maksut pysyvät manuaalisina järjestäjän lompakossa.',
   'nwcDiag.boundaryStrong': 'Raja pysyy:',
   'nwcDiag.connect': 'Yhdistä vain vastaanottoon',
   'nwcDiag.connectFirst': 'Yhdistä ensin vain vastaanottoon tarkoitettu NWC-lompakko',
