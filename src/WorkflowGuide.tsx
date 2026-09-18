@@ -74,7 +74,7 @@ export default function WorkflowGuide({ game, players, contributions, settlement
     </Guide>;
 
     return <Guide ready>
-      <div><small>Partie en cours</small><strong>✓ Toutes les caves sont encaissées</strong><span>Les rebuys restent possibles. À la fin de la vraie partie, passe au comptage des jetons physiques.</span></div>
+      <div><small>Partie en cours</small><strong>✓ Toutes les caves sont encaissées</strong><span>Les recaves (rebuys) restent possibles. À la fin de la vraie partie, passe au comptage des jetons physiques.</span></div>
       <button onClick={() => goTo('collections')}>Terminer et compter</button>
     </Guide>;
   }

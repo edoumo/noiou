@@ -104,7 +104,7 @@ const preferenceCatalog: Record<'fr' | 'en', Record<PreferenceUiKey, string>> = 
     clickSound: 'Son des boutons',
     clickSoundNote: 'Petit clic généré localement après une action utilisateur.',
     financialSound: 'Son financier renforcé',
-    financialSoundNote: 'Signal distinct pour les boutons de cave, rebuy, encaissement et règlement.',
+    financialSoundNote: 'Signal distinct pour les boutons de cave, recave (rebuy), encaissement et règlement.',
   },
   en: {
     settings: 'Settings',

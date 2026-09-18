@@ -47,7 +47,7 @@ describe('locale registry', () => {
 
 describe('interaction feedback classification', () => {
   it('detects financial actions without treating ordinary buttons as financial', () => {
-    expect(isFinancialActionLabel('+ Rebuy espèces')).toBe(true);
+    expect(isFinancialActionLabel('+ Recave (rebuy) espèces')).toBe(true);
     expect(isFinancialActionLabel('Confirmer ce payout dans NOIOU')).toBe(true);
     expect(isFinancialActionLabel('Ajouter')).toBe(false);
     expect(isFinancialActionLabel('Exporter')).toBe(false);

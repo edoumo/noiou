@@ -21,7 +21,7 @@ export function allocateOrganizerWalletContribution(
     throw new Error('Une cave existe déjà pour l’organisateur');
   }
   if (kind === 'REBUY' && !current.some((item) => item.playerId === player.id && item.kind === 'BUYIN' && item.status === 'PAID')) {
-    throw new Error('La cave initiale doit être encaissée avant un rebuy');
+    throw new Error('La cave initiale doit être encaissée avant une recave (rebuy)');
   }
 
   const contribution = createContribution(game, player.id, kind, 'LIGHTNING', id, at);

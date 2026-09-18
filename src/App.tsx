@@ -713,7 +713,7 @@ export default function App() {
     await assertLedgerIntegrity();
     if (!isPlayStarted(game)) throw new Error('Démarre réellement la partie avant de pouvoir la terminer');
     if (players.length < MIN_POKER_PLAYERS) throw new Error(`Le poker nécessite au moins ${MIN_POKER_PLAYERS} joueurs`);
-    if (contributions.some((contribution) => contribution.status === 'CREATED' || contribution.status === 'PENDING')) throw new Error('Une cave ou un rebuy est encore en attente');
+    if (contributions.some((contribution) => contribution.status === 'CREATED' || contribution.status === 'PENDING')) throw new Error('Une cave ou une recave (rebuy) est encore en attente');
     const unpaid = players.filter((player) => !hasPaidBuyInIn(contributions, player.id));
     if (unpaid.length > 0) throw new Error(`Cave initiale manquante : ${unpaid.map((player) => player.nickname).join(', ')}`);
     const next = { ...game, status: 'SETTLING' as const };
@@ -1142,11 +1142,11 @@ export default function App() {
           </section>
 
           <section className="card" id="collections">
-            <div className="section-title"><h2>{playStarted ? 'Caves et rebuys' : 'Caves initiales'}</h2><span>{playStarted ? 'partie en cours' : 'préparation avant de jouer'}</span></div>
+            <div className="section-title"><h2>{playStarted ? 'Caves et recaves (rebuys)' : 'Caves initiales'}</h2><span>{playStarted ? 'partie en cours' : 'préparation avant de jouer'}</span></div>
             {players.length === 0 && <p className="muted">Ajoute les joueurs pour commencer.</p>}
             {!playStarted && <div className="lobby-note" id="lobby-start">
               <strong>{players.length < MIN_POKER_PLAYERS ? `${MIN_POKER_PLAYERS} joueurs minimum pour démarrer` : readiness?.canStart ? 'Tous les joueurs sont prêts' : 'Préparation des caves initiales'}</strong>
-              <small>{players.length < MIN_POKER_PLAYERS ? 'Continue à ajouter les participants. NOIOU ne proposera pas de terminer une partie qui n’a pas commencé.' : readiness?.canStart ? 'Utilise « Démarrer la partie » dans le guide ci-dessus. Les rebuys apparaîtront ensuite.' : 'Encaisse chaque première cave. Les rebuys et la fin de partie restent cachés tant que le poker n’a pas commencé.'}</small>
+              <small>{players.length < MIN_POKER_PLAYERS ? 'Continue à ajouter les participants. NOIOU ne proposera pas de terminer une partie qui n’a pas commencé.' : readiness?.canStart ? 'Utilise « Démarrer la partie » dans le guide ci-dessus. Les recaves (rebuys) apparaîtront ensuite.' : 'Encaisse chaque première cave. Les recaves (rebuys) et la fin de partie restent cachés tant que le poker n’a pas commencé.'}</small>
             </div>}
             {players.map((player) => {
               const playerContributions = contributions.filter((contribution) => contribution.playerId === player.id);

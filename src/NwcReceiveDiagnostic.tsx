@@ -45,19 +45,19 @@ export default function NwcReceiveDiagnostic() {
     setUri('');
     setAcknowledged(false);
     setError('');
-    setStatus('Connexion NWC supprimée de la mémoire vive. Si une partie réelle est en cours, NOIOU restera verrouillé sur NWC et exigera une reconnexion avant toute nouvelle cave/rebuy.');
+    setStatus('Connexion NWC supprimée de la mémoire vive. Si une partie réelle est en cours, NOIOU restera verrouillé sur NWC et exigera une reconnexion avant toute nouvelle cave/recave (rebuy).');
   }
 
   function arm() {
     if (!acknowledged) throw new Error('Confirme d’abord que tu comprends que les prochaines caves Lightning pourront être réelles');
     nwc.armLiveGameReceipts();
-    setStatus('Réception réelle armée. Les prochaines caves/rebuys Lightning utiliseront NWC.');
+    setStatus('Réception réelle armée. Les prochaines caves/recaves (rebuys) Lightning utiliseront NWC.');
   }
 
   function disarm() {
     nwc.disarmLiveGameReceipts();
     setAcknowledged(false);
-    setStatus('Réception réelle désarmée. Les caves/rebuys Lightning repassent en mode non armé (diagnostic uniquement).');
+    setStatus('Réception réelle désarmée. Les caves/recaves (rebuys) Lightning repassent en mode non armé (diagnostic uniquement).');
   }
 
   async function createInvoice() {
@@ -101,7 +101,7 @@ export default function NwcReceiveDiagnostic() {
             <p className="nwc-kicker">Connexion privée · réception Lightning réelle</p>
             <h2 id="nwc-live-title">NWC réception seule</h2>
             <p>
-              La connexion peut servir aux diagnostics et, seulement après armement explicite, aux caves/rebuys réels.
+              La connexion peut servir aux diagnostics et, seulement après armement explicite, aux caves/recaves (rebuys) réels.
               NOIOU refuse toute permission de paiement sortant.
             </p>
           </div>
@@ -110,7 +110,7 @@ export default function NwcReceiveDiagnostic() {
 
         {!connection ? (
           <div className="nwc-connect-form">
-            {nwc.activeGameLockedToNwc && <div className="nwc-error" role="alert">Cette partie est déjà engagée en NWC réel. Reconnecte le wallet receive-only avant toute nouvelle cave/rebuy Lightning : NOIOU n’utilisera jamais d’encaissement fictif.</div>}
+            {nwc.activeGameLockedToNwc && <div className="nwc-error" role="alert">Cette partie est déjà engagée en NWC réel. Reconnecte le wallet receive-only avant toute nouvelle cave/recave (rebuy) Lightning : NOIOU n’utilisera jamais d’encaissement fictif.</div>}
             <label>
               URI NWC dédiée à NOIOU
               <input
@@ -161,7 +161,7 @@ export default function NwcReceiveDiagnostic() {
                 <>
                   <label className="check">
                     <input type="checkbox" checked={acknowledged} onChange={(event) => setAcknowledged(event.target.checked)} />
-                    Je comprends que les prochaines caves/rebuys Lightning créeront de vraies invoices et créditeront réellement le wallet connecté.
+                    Je comprends que les prochaines caves/recaves (rebuys) Lightning créeront de vraies invoices et créditeront réellement le wallet connecté.
                   </label>
                   <button disabled={!acknowledged} onClick={() => void run(async () => arm())}>Armer les caves réelles</button>
                 </>

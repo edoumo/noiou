@@ -17,7 +17,7 @@ export function buildTraceLabel(gameId: string, nickname: string, action: string
 }
 
 export function buildPaymentTrace(gameId: string, nickname: string, kind: ContributionKind, ordinal = 1): string {
-  return buildTraceLabel(gameId, nickname, kind === 'BUYIN' ? 'Cave' : `Rebuy ${ordinal}`);
+  return buildTraceLabel(gameId, nickname, kind === 'BUYIN' ? 'Cave' : `Recave ${ordinal}`);
 }
 
 export async function prepareExternalIncomingRequest(

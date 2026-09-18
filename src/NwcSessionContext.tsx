@@ -36,7 +36,7 @@ export function assertLiveGameInvoiceAmount(sats: number): void {
 
 export function assertRealNwcGameCurrency(currency: string | undefined): void {
   if (currency !== REAL_NWC_ALPHA_CURRENCY) {
-    throw new Error('Alpha NWC réel : les caves et rebuys réels sont autorisés uniquement pour une partie en SATS.');
+    throw new Error('Alpha NWC réel : les caves et recaves (rebuys) réels sont autorisés uniquement pour une partie en SATS.');
   }
 }
 
@@ -80,7 +80,7 @@ export function NwcSessionProvider({ children }: { children: ReactNode }) {
     async function createGameInvoice(sats: number, memo?: string) {
       const adapter = adapterRef.current;
       if (!adapter) {
-        if (activeGameLockedToNwc) throw new Error('Cette partie est verrouillée en NWC réel : reconnecte le wallet receive-only avant de créer une nouvelle cave/rebuy');
+        if (activeGameLockedToNwc) throw new Error('Cette partie est verrouillée en NWC réel : reconnecte le wallet receive-only avant de créer une nouvelle cave/recave (rebuy)');
         throw new Error('Reconnecte un wallet NWC receive-only avant de créer une cave réelle');
       }
       if (!liveGameReceiptsArmed && !activeGameLockedToNwc) throw new Error('Les caves Lightning réelles ne sont pas armées');
