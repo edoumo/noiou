@@ -1018,18 +1018,23 @@ export default function App() {
       {backupStatus && <div className="session-note"><span>{backupStatus}</span><button onClick={() => setBackupStatus('')}>OK</button></div>}
       {error && <div className="alert" role="alert">{error}</div>}
 
-      <section className="card backup-tools">
-        <div><strong>Sauvegarde portable</strong><small>JSON contrôlé par SHA-256 + vérification du journal. Aucun secret NWC n’est exporté.</small></div>
-        <div className="actions">
-          <button disabled={!game} onClick={() => void execute(exportBackup)}>Exporter</button>
-          <button disabled={Boolean(game && game.status !== 'CLOSED')} onClick={() => backupInputRef.current?.click()}>Importer</button>
-          <input ref={backupInputRef} hidden type="file" accept="application/json,.json" onChange={(event) => {
-            const file = event.target.files?.[0];
-            event.currentTarget.value = '';
-            if (file) void execute(() => importBackup(file));
-          }} />
+      <details className="card backup-tools backup-details">
+        <summary>
+          <span><strong>Sauvegarde et transfert</strong><small>Facultatif · pour archiver une partie ou la reprendre sur un autre navigateur/appareil.</small></span>
+        </summary>
+        <div className="backup-details-body">
+          <p className="muted">L’export contient l’état de la partie : joueurs, caves/recaves, comptage, règlements et journal d’audit. Aucun secret NWC n’est exporté. L’import restaure cette sauvegarde locale après vérification d’intégrité.</p>
+          <div className="actions">
+            <button disabled={!game} onClick={() => void execute(exportBackup)}>Exporter la partie</button>
+            <button disabled={Boolean(game && game.status !== 'CLOSED')} onClick={() => backupInputRef.current?.click()}>Importer une sauvegarde</button>
+            <input ref={backupInputRef} hidden type="file" accept="application/json,.json" onChange={(event) => {
+              const file = event.target.files?.[0];
+              event.currentTarget.value = '';
+              if (file) void execute(() => importBackup(file));
+            }} />
+          </div>
         </div>
-      </section>
+      </details>
 
       {!game && (
         <section className="card">
