@@ -32,7 +32,7 @@ function element(top: number, bottom: number, left = 0, right = 100): StubElemen
   };
 }
 
-const FLOATING_KEY = '.party-join-launcher, .new-game-fab';
+const FLOATING_KEY = '.party-join-launcher, .new-game-fab, .global-preferences:not([open]) > summary';
 const PRIMARY_KEY = 'button.primary.wide, button.wide-mobile, button.primary';
 const SAFE_KEY = '[data-floating-safe-zone]';
 const INTERACTIVE_KEY = 'button, a[href], input, select, textarea, summary, [role="button"]';
@@ -179,18 +179,18 @@ describe('floating controls dodge — protected safe zones', () => {
   });
 
   it('does not treat the floating shortcuts themselves as obstacles', () => {
-    // Without this guard the launcher would hide itself forever, because its
-    // own button lives inside its own box.
+    // Without this guard the launcher would hide itself forever: its own button
+    // lives inside its own obstacle box. Here the floating ROOT list contains
+    // the launcher, so its own button is excluded from the protected set — the
+    // only remaining target (a bare interactive element) sits outside.
     const launcher = element(720, 764, 12, 220);
-    launcher.contains = (other: unknown) => other === launcher;
+    const outside = element(100, 140, 0, 100);
     const doc = docStub({
       [FLOATING_KEY]: [launcher],
       [PRIMARY_KEY]: [],
       [SAFE_KEY]: [],
-      [INTERACTIVE_KEY]: [launcher],
+      [INTERACTIVE_KEY]: [outside],
     });
-    // `contains` is only consulted for roots !== element; the loop compares
-    // identity first, so the element equals the root and is excluded.
     expect(protectedContentInBand(doc, winStub())).toBe(false);
   });
 

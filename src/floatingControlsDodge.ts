@@ -35,7 +35,14 @@ export const SAFE_ZONE_SELECTOR = '[data-floating-safe-zone]';
 const INTERACTIVE_SELECTOR = 'button, a[href], input, select, textarea, summary, [role="button"]';
 
 /** Elements that step aside. */
-const FLOATING_SELECTOR = '.party-join-launcher, .new-game-fab';
+const FLOATING_SELECTOR = '.party-join-launcher, .new-game-fab, .global-preferences:not([open])';
+
+/**
+ * The obstacles that actually capture taps: the shortcuts themselves and the
+ * collapsed settings pill. The settings *container* is `pointer-events:none`,
+ * so its own (much wider) box must never be used as an obstacle.
+ */
+const FLOATING_OBSTACLE_SELECTOR = '.party-join-launcher, .new-game-fab, .global-preferences:not([open]) > summary';
 
 /** Band (px above the viewport bottom) occupied by the floating controls. */
 const BAND_HEIGHT = 170;
@@ -61,11 +68,12 @@ function anyOverlap(box: DOMRect, others: readonly DOMRect[]): boolean {
 }
 
 /**
- * Floating boxes currently rendered (the shortcut hitboxes).
+ * Floating boxes currently rendered (the shortcut hitboxes) — these are the
+ * obstacles that can cover protected content.
  * Exported for unit testing.
  */
 export function floatingBoxes(doc: Document): DOMRect[] {
-  return Array.from(doc.querySelectorAll<HTMLElement>(FLOATING_SELECTOR))
+  return Array.from(doc.querySelectorAll<HTMLElement>(FLOATING_OBSTACLE_SELECTOR))
     .map((element) => element.getBoundingClientRect())
     .filter(isMeasurable);
 }
@@ -84,7 +92,8 @@ export function protectedContentInBand(doc: Document, win: Window): boolean {
   const floatingRoots = Array.from(doc.querySelectorAll<HTMLElement>(FLOATING_SELECTOR));
   const isFloating = (element: Element): boolean => floatingRoots.some((root) => root === element || root.contains(element));
 
-  // 1. Explicit safe zones: anything marked is protected whatever its size.
+  // 1. Explicit safe zones: anything marked is protected whatever its size, as
+  //    soon as ANY part of the zone's ink/controls falls under an obstacle.
   for (const zone of Array.from(doc.querySelectorAll<HTMLElement>(SAFE_ZONE_SELECTOR))) {
     if (isFloating(zone)) continue;
     const box = zone.getBoundingClientRect();
@@ -104,13 +113,18 @@ export function protectedContentInBand(doc: Document, win: Window): boolean {
     if (anyOverlap(box, floating)) return true;
   }
 
-  // 3. Any other interactive control the shortcut would cover: an in-flow
+  // 3. Any other interactive control an obstacle would cover: an in-flow
   //    button/field/row must never be clickable-blocked by a fixed shortcut.
+  //    A control counts as covered when its CENTRE is under the obstacle —
+  //    a sliver of overlap at an edge leaves it perfectly usable, so dodging
+  //    for that would flicker the shortcuts for no reason.
   for (const control of Array.from(doc.querySelectorAll<HTMLElement>(INTERACTIVE_SELECTOR))) {
     if (isFloating(control)) continue;
     const box = control.getBoundingClientRect();
     if (!isMeasurable(box)) continue;
-    if (anyOverlap(box, floating)) return true;
+    const centre = { x: box.left + box.width / 2, y: box.top + box.height / 2 };
+    const covered = floating.some((other) => centre.x >= other.left && centre.x <= other.right && centre.y >= other.top && centre.y <= other.bottom);
+    if (covered) return true;
   }
 
   return false;

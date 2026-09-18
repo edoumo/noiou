@@ -39,19 +39,22 @@
   border-color:#475569;
 }
 
-/* Floating shortcuts (bottom-left) step aside while a primary action passes
-   through their band, so an in-flow CTA can never be partially covered.
-   Transition is opacity-only: the shortcuts keep their position and hitbox
-   when they are useful, and come back as soon as the action scrolled away. */
+/* Floating shortcuts (bottom-left) and the collapsed settings pill step aside
+   while they would cover a protected zone (organizer Lightning / NWC block,
+   settlement controls, audit log, backup & transfer) or an in-flow control.
+   Transition is opacity-only: they keep their position and hitbox when they are
+   useful, and come back as soon as the overlap scrolled away. */
 :root.floating-controls-dodging .party-join-launcher,
-:root.floating-controls-dodging .new-game-fab{
+:root.floating-controls-dodging .new-game-fab,
+:root.floating-controls-dodging .global-preferences:not([open]) > summary{
   opacity:0;
   pointer-events:none;
   transform:translateY(6px);
   transition:opacity .16s ease, transform .16s ease;
 }
-.party-join-launcher,.new-game-fab{transition:opacity .16s ease, transform .16s ease}
+.party-join-launcher,.new-game-fab,.global-preferences>summary{transition:opacity .16s ease, transform .16s ease}
 @media(prefers-reduced-motion:reduce){
   :root.floating-controls-dodging .party-join-launcher,
-  :root.floating-controls-dodging .new-game-fab{transform:none}
+  :root.floating-controls-dodging .new-game-fab,
+  :root.floating-controls-dodging .global-preferences:not([open]) > summary{transform:none}
 }
