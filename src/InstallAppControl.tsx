@@ -6,6 +6,8 @@ interface InstallPromptEvent extends Event {
   userChoice: Promise<{ outcome: 'accepted' | 'dismissed'; platform: string }>;
 }
 
+const DISMISS_KEY = 'noiou.install-banner-dismissed.v1';
+
 function isStandalone(): boolean {
   if (typeof window === 'undefined') return false;
   const iosStandalone = Boolean((window.navigator as Navigator & { standalone?: boolean }).standalone);
@@ -20,6 +22,13 @@ function isIos(): boolean {
 export default function InstallAppControl() {
   const [promptEvent, setPromptEvent] = useState<InstallPromptEvent | null>(null);
   const [installed, setInstalled] = useState(() => isStandalone());
+  const [dismissed, setDismissed] = useState(() => {
+    try {
+      return window.localStorage.getItem(DISMISS_KEY) === '1';
+    } catch {
+      return false;
+    }
+  });
   const [showIosHelp, setShowIosHelp] = useState(false);
 
   useEffect(() => {
@@ -40,9 +49,18 @@ export default function InstallAppControl() {
     };
   }, []);
 
-  if (installed) return null;
+  if (installed || dismissed) return null;
   const ios = isIos();
   if (!promptEvent && !ios) return null;
+
+  function dismiss() {
+    setDismissed(true);
+    try {
+      window.localStorage.setItem(DISMISS_KEY, '1');
+    } catch {
+      /* private mode: dismissal stays session-only */
+    }
+  }
 
   async function install() {
     if (promptEvent) {
@@ -57,16 +75,36 @@ export default function InstallAppControl() {
     if (ios) setShowIosHelp((current) => !current);
   }
 
+  // In-flow banner (no fixed positioning): it scrolls away with the page, so
+  // it can never cover the settings pill, the QR launcher, buy-in/rebuy
+  // buttons, invoices or settlement controls. Dismissible, and hidden once
+  // the app runs installed/standalone.
   return (
-    <aside className="install-app" aria-live="polite">
-      <button className="install-app-button" type="button" onClick={() => void install()}>
-        ⬇ <span className="install-app-label-full">Installer l’app</span><span className="install-app-label-short">Installer</span>
-      </button>
+    <section className="install-app" aria-live="polite">
+      <div className="install-app-inner">
+        <div className="install-app-copy">
+          <strong>Installer NOIOU</strong>
+          <small>Ajoute l’application à l’écran d’accueil et ouvre-la en plein écran.</small>
+        </div>
+        <div className="install-app-actions">
+          <button className="install-app-button" type="button" onClick={() => void install()}>
+            ⬇ Installer l’app
+          </button>
+          <button
+            className="install-app-dismiss"
+            type="button"
+            aria-label="Ne plus proposer l’installation"
+            onClick={dismiss}
+          >
+            ✕
+          </button>
+        </div>
+      </div>
       {showIosHelp && (
         <div className="install-app-help">
           Sur iPhone/iPad : ouvre le menu <strong>Partager</strong>, puis choisis <strong>Sur l’écran d’accueil</strong>.
         </div>
       )}
-    </aside>
+    </section>
   );
 }

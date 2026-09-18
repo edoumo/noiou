@@ -17,13 +17,13 @@ import './ux27.css';
 export default function AppShell() {
   return (
     <NwcSessionProvider>
+      <InstallAppControl />
       <CashBuyInConfirmationBoundary><App /></CashBuyInConfirmationBoundary>
       <GuidedLobbyControl />
       <PartyJoinControl />
       <SessionResetControl />
       <NwcReceiveDiagnostic />
       <InteractionPreferences />
-      <InstallAppControl />
     </NwcSessionProvider>
   );
 }
