@@ -1,3 +1,5 @@
+import { t } from './i18n';
+
 export type LightningDestinationKind = 'LIGHTNING_ADDRESS' | 'BOLT12_OFFER' | 'BOLT11_INVOICE' | 'LNURL' | 'UNKNOWN';
 
 export interface ParsedLightningDestination {
@@ -33,34 +35,34 @@ function unwrapLightningPayload(input: string): string {
 
 export function parseLightningDestination(input: string): ParsedLightningDestination {
   const value = unwrapLightningPayload(input);
-  if (!value) return { kind: 'UNKNOWN', value: '', reusable: false, label: 'Destination vide' };
+  if (!value) return { kind: 'UNKNOWN', value: '', reusable: false, label: t('destKind.empty') };
 
   if (/^[^\s@]+@[^\s@.]+(?:\.[^\s@.]+)+$/i.test(value)) {
-    return { kind: 'LIGHTNING_ADDRESS', value, reusable: true, label: 'Lightning Address' };
+    return { kind: 'LIGHTNING_ADDRESS', value, reusable: true, label: t('destKind.lightningAddress') };
   }
 
   if (/^lno1[0-9a-z]+$/i.test(value)) {
-    return { kind: 'BOLT12_OFFER', value, reusable: true, label: 'Offre BOLT12' };
+    return { kind: 'BOLT12_OFFER', value, reusable: true, label: t('destKind.bolt12') };
   }
 
   if (/^lnurl1[0-9a-z]+$/i.test(value)) {
-    return { kind: 'LNURL', value, reusable: true, label: 'LNURL' };
+    return { kind: 'LNURL', value, reusable: true, label: t('destKind.lnurl') };
   }
 
   if (/^ln(?:bc|tb|bcrt)[0-9a-z]+$/i.test(value)) {
-    return { kind: 'BOLT11_INVOICE', value, reusable: false, label: 'Invoice BOLT11' };
+    return { kind: 'BOLT11_INVOICE', value, reusable: false, label: t('destKind.bolt11') };
   }
 
-  return { kind: 'UNKNOWN', value, reusable: false, label: 'Format Lightning inconnu' };
+  return { kind: 'UNKNOWN', value, reusable: false, label: t('destKind.unknown') };
 }
 
 export function normalizeReusableLightningDestination(input: string): string {
   const parsed = parseLightningDestination(input);
   if (parsed.kind === 'BOLT11_INVOICE') {
-    throw new Error('Une invoice BOLT11 est ponctuelle et peut expirer. Utilise une Lightning Address, une offre BOLT12 (par ex. Phoenix) ou un LNURL réutilisable.');
+    throw new Error(t('error.bolt11Spot'));
   }
   if (!parsed.reusable) {
-    throw new Error('Destination Lightning non reconnue. Formats acceptés : adresse user@domain, offre BOLT12 lno1… ou LNURL.');
+    throw new Error(t('error.destinationUnknown'));
   }
   return parsed.value;
 }

@@ -1,4 +1,5 @@
 import { useMemo, useRef, useState } from 'react';
+import { useI18n } from './i18n/provider';
 import { parseLightningDestination } from './lightningDestination';
 import QrCameraScanner from './QrCameraScanner';
 import { decodeQrImageFile } from './qrImageImport';
@@ -13,6 +14,7 @@ interface Props {
 }
 
 export default function LightningDestinationField({ label, value, onChange, optional = false, compactHint }: Props) {
+  const { t } = useI18n();
   const [scanning, setScanning] = useState(false);
   const [scanMessage, setScanMessage] = useState('');
   const imageInputRef = useRef<HTMLInputElement | null>(null);
@@ -24,18 +26,20 @@ export default function LightningDestinationField({ label, value, onChange, opti
     const detected = parseLightningDestination(raw);
     onChange(detected.value || raw.trim());
     setScanning(false);
+    const unknownKeys = { QR: 'destField.detected.qrUnknown', image: 'destField.detected.imageUnknown', clipboard: 'destField.detected.clipboardUnknown' } as const;
+    const labelKeys = { QR: 'destField.detected.label', image: 'destField.detected.labelFromImage', clipboard: 'destField.detected.labelFromClipboard' } as const;
     setScanMessage(detected.kind === 'UNKNOWN'
-      ? `${source === 'QR' ? 'QR lu' : source === 'image' ? 'Image lue' : 'Texte collé'}, mais le format Lightning n’est pas reconnu.`
-      : `${detected.label} détecté${source === 'image' ? ' depuis l’image' : source === 'clipboard' ? ' depuis le presse-papiers' : ''}.`);
+      ? t(unknownKeys[source])
+      : t(labelKeys[source], { label: detected.label }));
   }
 
   async function pasteFromClipboard() {
     try {
       const text = await navigator.clipboard.readText();
-      if (!text.trim()) throw new Error('Le presse-papiers est vide.');
+      if (!text.trim()) throw new Error(t('error.clipboardEmpty'));
       applyDetected(text, 'clipboard');
     } catch (caught) {
-      setScanMessage(caught instanceof Error ? caught.message : 'Impossible de lire le presse-papiers.');
+      setScanMessage(caught instanceof Error ? caught.message : t('error.clipboardUnreadable'));
     }
   }
 
@@ -43,29 +47,29 @@ export default function LightningDestinationField({ label, value, onChange, opti
     try {
       applyDetected(await decodeQrImageFile(file), 'image');
     } catch (caught) {
-      setScanMessage(caught instanceof Error ? caught.message : 'Impossible de lire ce QR.');
+      setScanMessage(caught instanceof Error ? caught.message : t('error.qrNotFound'));
     }
   }
 
   return (
     <div className="lightning-destination-field">
-      <label>{label}{optional ? ' (facultatif)' : ''}
+      <label>{label}{optional ? t('destField.optional') : ''}
         <input
           value={value}
           onChange={(event) => {
             onChange(event.target.value);
             setScanMessage('');
           }}
-          placeholder="alice@wallet.example, lno1… ou LNURL"
+          placeholder={t('destField.placeholder')}
           autoCapitalize="none"
           autoCorrect="off"
           spellCheck={false}
         />
       </label>
       <div className="destination-actions">
-        <button type="button" disabled={!cameraAvailable} onClick={() => setScanning(true)}>📷 Scanner</button>
-        <button type="button" onClick={() => imageInputRef.current?.click()}>🖼️ Depuis Photos</button>
-        <button type="button" disabled={!clipboardAvailable} onClick={() => void pasteFromClipboard()}>📋 Coller</button>
+        <button type="button" disabled={!cameraAvailable} onClick={() => setScanning(true)}>{t('destField.scan')}</button>
+        <button type="button" onClick={() => imageInputRef.current?.click()}>{t('destField.fromPhotos')}</button>
+        <button type="button" disabled={!clipboardAvailable} onClick={() => void pasteFromClipboard()}>{t('destField.paste')}</button>
         <input
           ref={imageInputRef}
           hidden
@@ -80,16 +84,16 @@ export default function LightningDestinationField({ label, value, onChange, opti
         {value && <span className={`destination-kind ${parsed.reusable ? 'valid' : parsed.kind === 'BOLT11_INVOICE' ? 'warning' : 'unknown'}`}>{parsed.label}</span>}
       </div>
       {parsed.kind === 'BOLT11_INVOICE' && <div className="destination-warning destination-blocker" role="alert">
-        <strong>⚠️ Invoice BOLT11 ponctuelle</strong>
-        <span>Elle peut expirer et ne peut pas être enregistrée comme destination permanente.</span>
-        <span><b>Action requise :</b> remplace-la par une Lightning Address, une offre BOLT12 ou un LNURL, ou efface ce champ. Tant qu’elle reste ici, l’enregistrement de cette configuration sera bloqué.</span>
+        <strong>{t('destField.bolt11.title')}</strong>
+        <span>{t('destField.bolt11.note')}</span>
+        <span><b>{t('destField.bolt11.action')}</b></span>
       </div>}
-      {parsed.kind === 'BOLT12_OFFER' && <small className="destination-ok">Offre BOLT12 réutilisable (`lno1…`).</small>}
+      {parsed.kind === 'BOLT12_OFFER' && <small className="destination-ok">{t('destField.bolt12.ok')}</small>}
       <details className="destination-help">
-        <summary>ℹ️ Aide</summary>
+        <summary>{t('destField.help.summary')}</summary>
         {compactHint && <small className="destination-hint">{compactHint}</small>}
-        <small className="destination-hint">Même téléphone : copie la destination depuis ton wallet ou importe une capture du QR depuis Photos.</small>
-        {!cameraAvailable && <small className="destination-hint">Caméra non disponible dans ce navigateur : utilise Photos, le presse-papiers ou la saisie manuelle.</small>}
+        <small className="destination-hint">{t('destField.help.samePhone')}</small>
+        {!cameraAvailable && <small className="destination-hint">{t('destField.help.noCamera')}</small>}
       </details>
       {scanMessage && <small className="destination-hint">{scanMessage}</small>}
       {scanning && <QrCameraScanner onDetected={(raw) => applyDetected(raw, 'QR')} onCancel={() => setScanning(false)} />}

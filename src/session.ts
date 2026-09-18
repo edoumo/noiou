@@ -1,4 +1,5 @@
 import type { Contribution, DealerTip, Game, LedgerEvent, Payout, Player, ProjectDonation, SettlementResult } from './domain';
+import { t } from './i18n';
 import type { LightningInvoice } from './lightning';
 
 export const SESSION_STORAGE_KEY = 'noiou.session.v1';
@@ -49,16 +50,16 @@ export function serializeSession(snapshot: SessionSnapshot): string {
 
 export function parseSession(raw: string): SessionSnapshot {
   const parsed: unknown = JSON.parse(raw);
-  if (!parsed || typeof parsed !== 'object') throw new Error('Invalid session payload');
+  if (!parsed || typeof parsed !== 'object') throw new Error(t('error.sessionPayloadInvalid'));
   const candidate = parsed as Partial<SessionSnapshot>;
-  if (candidate.schemaVersion !== SESSION_SCHEMA_VERSION) throw new Error('Unsupported session schema version');
+  if (candidate.schemaVersion !== SESSION_SCHEMA_VERSION) throw new Error(t('error.sessionSchemaUnsupported'));
   if (!Array.isArray(candidate.players) || !Array.isArray(candidate.contributions) || !Array.isArray(candidate.payouts) || !Array.isArray(candidate.ledger) || !Array.isArray(candidate.projectDonations)) {
-    throw new Error('Invalid session collections');
+    throw new Error(t('error.sessionCollectionsInvalid'));
   }
-  if (candidate.dealerTips !== undefined && !Array.isArray(candidate.dealerTips)) throw new Error('Invalid dealer tips');
-  if (!candidate.stacks || typeof candidate.stacks !== 'object' || !candidate.mockInvoices || typeof candidate.mockInvoices !== 'object') throw new Error('Invalid session maps');
+  if (candidate.dealerTips !== undefined && !Array.isArray(candidate.dealerTips)) throw new Error(t('error.sessionTipsInvalid'));
+  if (!candidate.stacks || typeof candidate.stacks !== 'object' || !candidate.mockInvoices || typeof candidate.mockInvoices !== 'object') throw new Error(t('error.sessionMapsInvalid'));
   if (typeof candidate.stacksLocked !== 'boolean' || typeof candidate.dealerPaid !== 'boolean' || typeof candidate.savedAt !== 'string') {
-    throw new Error('Invalid session state');
+    throw new Error(t('error.sessionStateInvalid'));
   }
   return candidate as SessionSnapshot;
 }

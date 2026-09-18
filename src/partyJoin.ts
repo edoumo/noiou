@@ -1,5 +1,6 @@
 import type { Currency, PaymentMethod } from './domain';
 import { normalizeReusableLightningDestination } from './lightningDestination';
+import { t } from './i18n';
 
 export const PARTY_JOIN_VERSION = 1 as const;
 export const PARTY_JOIN_RESPONSE_PREFIX = 'noiou:join-response:';
@@ -61,9 +62,9 @@ export function createPartyInvite(
   createdAt = new Date().toISOString(),
   chipsPerBuyIn?: number,
 ): PartyInvite {
-  if (!gameId.trim()) throw new Error('Identifiant de partie manquant');
-  if (!Number.isFinite(buyInAmount) || buyInAmount <= 0) throw new Error('Cave invalide');
-  if (chipsPerBuyIn !== undefined && (!Number.isInteger(chipsPerBuyIn) || chipsPerBuyIn <= 0)) throw new Error('Nombre de jetons par cave invalide');
+  if (!gameId.trim()) throw new Error(t('error.partyGameIdMissing'));
+  if (!Number.isFinite(buyInAmount) || buyInAmount <= 0) throw new Error(t('error.partyBuyInInvalid'));
+  if (chipsPerBuyIn !== undefined && (!Number.isInteger(chipsPerBuyIn) || chipsPerBuyIn <= 0)) throw new Error(t('error.partyChipsInvalid'));
   return { v: PARTY_JOIN_VERSION, type: 'PARTY_INVITE', gameId, currency, buyInAmount, chipsPerBuyIn, createdAt };
 }
 
@@ -84,11 +85,11 @@ export function parsePartyInvite(input: string): PartyInvite {
   } catch {
     // A raw encoded invite is accepted by the in-app scanner as well.
   }
-  if (!encoded) throw new Error('QR de partie invalide');
+  if (!encoded) throw new Error(t('error.partyQrInvalid'));
   const invite = decodeOrThrow<Partial<PartyInvite>>(encoded, 'QR de partie invalide');
   const validChips = invite.chipsPerBuyIn === undefined || (Number.isInteger(invite.chipsPerBuyIn) && (invite.chipsPerBuyIn ?? 0) > 0);
   if (invite.v !== PARTY_JOIN_VERSION || invite.type !== 'PARTY_INVITE' || typeof invite.gameId !== 'string' || !invite.gameId.trim() || !validCurrency(invite.currency) || typeof invite.buyInAmount !== 'number' || !Number.isFinite(invite.buyInAmount) || invite.buyInAmount <= 0 || !validChips || typeof invite.createdAt !== 'string') {
-    throw new Error('QR de partie invalide');
+    throw new Error(t('error.partyQrInvalid'));
   }
   return invite as PartyInvite;
 }
@@ -100,9 +101,9 @@ export function createPartyJoinResponse(input: {
   lightningDestination?: string;
 }): PartyJoinResponse {
   const nickname = input.nickname.trim();
-  if (!input.gameId.trim()) throw new Error('Partie manquante');
-  if (!nickname) throw new Error('Le pseudo est obligatoire');
-  if (!validPayment(input.preferredPayment)) throw new Error('Mode de règlement invalide');
+  if (!input.gameId.trim()) throw new Error(t('error.partyGameMissing'));
+  if (!nickname) throw new Error(t('error.nicknameRequired'));
+  if (!validPayment(input.preferredPayment)) throw new Error(t('error.partyPayModeInvalid'));
   const lightningDestination = input.lightningDestination?.trim()
     ? normalizeReusableLightningDestination(input.lightningDestination)
     : undefined;
@@ -122,10 +123,10 @@ export function encodePartyJoinResponse(response: PartyJoinResponse): string {
 
 export function parsePartyJoinResponse(input: string): PartyJoinResponse {
   const trimmed = input.trim();
-  if (!trimmed.startsWith(PARTY_JOIN_RESPONSE_PREFIX)) throw new Error('Réponse joueur invalide');
-  const response = decodeOrThrow<Partial<PartyJoinResponse>>(trimmed.slice(PARTY_JOIN_RESPONSE_PREFIX.length), 'Réponse joueur invalide');
+  if (!trimmed.startsWith(PARTY_JOIN_RESPONSE_PREFIX)) throw new Error(t('error.partyResponseInvalid'));
+  const response = decodeOrThrow<Partial<PartyJoinResponse>>(trimmed.slice(PARTY_JOIN_RESPONSE_PREFIX.length), t('error.partyResponseInvalid'));
   if (response.v !== PARTY_JOIN_VERSION || response.type !== 'PARTY_JOIN_RESPONSE' || typeof response.gameId !== 'string' || !response.gameId.trim() || typeof response.nickname !== 'string' || !response.nickname.trim() || !validPayment(response.preferredPayment)) {
-    throw new Error('Réponse joueur invalide');
+    throw new Error(t('error.partyResponseInvalid'));
   }
   const lightningDestination = typeof response.lightningDestination === 'string' && response.lightningDestination.trim()
     ? normalizeReusableLightningDestination(response.lightningDestination)

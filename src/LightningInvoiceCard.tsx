@@ -1,4 +1,5 @@
 import { QRCodeSVG } from 'qrcode.react';
+import { useI18n } from './i18n/provider';
 import type { LightningInvoice } from './lightning';
 import LightningRequestActions from './LightningRequestActions';
 
@@ -8,29 +9,31 @@ interface Props {
 }
 
 export default function LightningInvoiceCard({ invoice, onSimulatePaid }: Props) {
+  const { t, formatNumber } = useI18n();
   const realNwc = invoice.source === 'NWC';
+  const sats = formatNumber(invoice.sats);
 
   return (
     <div className="invoice-card">
-      <div className="invoice-qr" aria-label="QR code Lightning">
+      <div className="invoice-qr" aria-label={t('invoice.qrAria')}>
         <QRCodeSVG value={invoice.request} size={180} level="M" marginSize={2} />
       </div>
       <div className="invoice-copy">
-        <strong>{invoice.sats.toLocaleString('fr-FR')} sats</strong>
+        <strong>{t('invoice.sats', { sats })}</strong>
         <small>{invoice.status === 'PAID'
-          ? 'Paiement reçu ✓'
+          ? t('invoice.paid')
           : realNwc
-            ? 'Invoice réelle · scanne le QR ou ouvre-la dans un wallet sur ce téléphone'
+            ? t('invoice.real')
             : import.meta.env.DEV
-              ? 'Invoice mock · QR de test uniquement'
-              : 'Demande inactive · non encaissable'}</small>
+              ? t('invoice.mock')
+              : t('invoice.inactive')}</small>
         <code>{invoice.request}</code>
-        {realNwc && invoice.status === 'PENDING' && <LightningRequestActions request={invoice.request} label={`Paiement NOIOU · ${invoice.sats.toLocaleString('fr-FR')} sats`} />}
+        {realNwc && invoice.status === 'PENDING' && <LightningRequestActions request={invoice.request} label={t('invoice.paymentLabel', { sats })} />}
         {/* UX27: the "simulate payment" shortcut exists only in development/test builds.
             The static DEV gate removes the whole branch (and its copy) from production
             bundles — a production build can never fake a Lightning payment. */}
-        {import.meta.env.DEV && onSimulatePaid && !realNwc && invoice.status === 'PENDING' && <button onClick={onSimulatePaid}>Simuler paiement Lightning</button>}
-        {!import.meta.env.DEV && onSimulatePaid && realNwc && invoice.status === 'PENDING' && <button onClick={onSimulatePaid}>Vérifier le paiement</button>}
+        {import.meta.env.DEV && onSimulatePaid && !realNwc && invoice.status === 'PENDING' && <button onClick={onSimulatePaid}>{t('invoice.simulate')}</button>}
+        {!import.meta.env.DEV && onSimulatePaid && realNwc && invoice.status === 'PENDING' && <button onClick={onSimulatePaid}>{t('invoice.checkPayment')}</button>}
       </div>
     </div>
   );

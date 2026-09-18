@@ -1,3 +1,5 @@
+import { t } from './i18n';
+
 export interface NwcConnectionDescriptor {
   walletPubkey: string;
   relays: string[];
@@ -23,24 +25,24 @@ const HEX_64 = /^[0-9a-f]{64}$/i;
 
 export function parseNwcUri(uri: string): NwcConnectionDescriptor {
   const value = uri.trim();
-  if (!value.startsWith('nostr+walletconnect://')) throw new Error('Unsupported NWC URI scheme');
+  if (!value.startsWith('nostr+walletconnect://')) throw new Error(t('error.nwcUriScheme'));
   const url = new URL(value);
   const walletPubkey = url.hostname || url.pathname.replace(/^\/+/, '');
   const secret = url.searchParams.get('secret') ?? '';
   const relays = url.searchParams.getAll('relay');
   const lud16 = url.searchParams.get('lud16') ?? undefined;
 
-  if (!HEX_64.test(walletPubkey)) throw new Error('Invalid NWC wallet public key');
-  if (!HEX_64.test(secret)) throw new Error('Invalid NWC secret');
-  if (relays.length === 0 || relays.some((relay) => !/^wss:\/\//i.test(relay))) throw new Error('NWC requires at least one secure wss relay');
+  if (!HEX_64.test(walletPubkey)) throw new Error(t('error.nwcPubkey'));
+  if (!HEX_64.test(secret)) throw new Error(t('error.nwcSecret'));
+  if (relays.length === 0 || relays.some((relay) => !/^wss:\/\//i.test(relay))) throw new Error(t('error.nwcRelayRequired'));
 
   return { walletPubkey, relays, secret, lud16 };
 }
 
 export function assertSafeNwcPolicy(policy: NwcPermissionPolicy): void {
-  if (!policy.allowInvoiceCreation || !policy.allowInvoiceLookup) throw new Error('NOIOU requires invoice create/lookup capabilities');
-  if (policy.allowOutgoingPayments) throw new Error('Live outgoing NWC payments are disabled in the private prototype');
-  if (!policy.requireInteractiveConfirmation) throw new Error('Interactive confirmation is mandatory');
+  if (!policy.allowInvoiceCreation || !policy.allowInvoiceLookup) throw new Error(t('error.nwcCapabilities'));
+  if (policy.allowOutgoingPayments) throw new Error(t('error.nwcOutgoingDisabled'));
+  if (!policy.requireInteractiveConfirmation) throw new Error(t('error.nwcConfirmationMandatory'));
 }
 
 export function redactNwcDescriptor(descriptor: NwcConnectionDescriptor) {

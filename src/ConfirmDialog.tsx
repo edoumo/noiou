@@ -1,3 +1,5 @@
+import { useI18n } from './i18n/provider';
+
 interface ConfirmDialogProps {
   open: boolean;
   title: string;
@@ -12,11 +14,12 @@ export default function ConfirmDialog({
   open,
   title,
   message,
-  confirmLabel = 'Confirmer',
-  cancelLabel = 'Annuler',
+  confirmLabel,
+  cancelLabel,
   onConfirm,
   onCancel,
 }: ConfirmDialogProps) {
+  const { t } = useI18n();
   if (!open) return null;
 
   return (
@@ -27,8 +30,8 @@ export default function ConfirmDialog({
         <h2 id="confirm-dialog-title">{title}</h2>
         <p>{message}</p>
         <div className="dialog-actions">
-          <button onClick={onCancel}>{cancelLabel}</button>
-          <button className="primary" onClick={onConfirm} autoFocus>{confirmLabel}</button>
+          <button onClick={onCancel}>{cancelLabel ?? t('dialog.cancel')}</button>
+          <button className="primary" onClick={onConfirm} autoFocus>{confirmLabel ?? t('dialog.confirm')}</button>
         </div>
       </div>
     </div>

@@ -1,5 +1,6 @@
 import { useState } from 'react';
 import ConfirmDialog from './ConfirmDialog';
+import { useI18n } from './i18n/provider';
 import { clearSession, loadSession } from './session';
 
 function activeGameLabel(): string {
@@ -14,6 +15,7 @@ function activeGameLabel(): string {
 }
 
 export default function SessionResetControl() {
+  const { t } = useI18n();
   const [confirming, setConfirming] = useState(false);
   const [label, setLabel] = useState('');
 
@@ -31,12 +33,12 @@ export default function SessionResetControl() {
 
   return (
     <>
-      <button type="button" className="new-game-fab" onClick={askReset}>＋ Nouvelle partie</button>
+      <button type="button" className="new-game-fab" onClick={askReset}>{t('reset.fab')}</button>
       <ConfirmDialog
         open={confirming}
-        title="Réinitialiser la partie ?"
-        message={`La partie${label ? ` (${label})` : ''} sera effacée de ce téléphone. Les réglages de l’application (langue, thème, sons, vibrations) seront conservés.`}
-        confirmLabel="Effacer et recommencer"
+        title={t('dialog.reset.title')}
+        message={t('dialog.reset.message', { label: label ? t('dialog.reset.label', { label }) : '' })}
+        confirmLabel={t('dialog.reset.confirm')}
         onCancel={() => setConfirming(false)}
         onConfirm={reset}
       />

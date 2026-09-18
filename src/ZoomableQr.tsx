@@ -1,5 +1,6 @@
 import { useEffect, useState } from 'react';
 import { QRCodeSVG } from 'qrcode.react';
+import { useI18n } from './i18n/provider';
 import './zoomableQr.css';
 
 interface Props {
@@ -9,6 +10,7 @@ interface Props {
 }
 
 export default function ZoomableQr({ value, label, size = 220 }: Props) {
+  const { t } = useI18n();
   const [open, setOpen] = useState(false);
 
   useEffect(() => {
@@ -30,24 +32,24 @@ export default function ZoomableQr({ value, label, size = 220 }: Props) {
       <button
         type="button"
         className="zoomable-qr-trigger"
-        aria-label={`${label}. Appuyer pour agrandir le QR`}
-        title="Appuyer pour agrandir"
+        aria-label={t('qr.zoom.enlargeAria', { label })}
+        title={t('qr.zoom.enlarge')}
         onClick={() => setOpen(true)}
       >
         <QRCodeSVG value={value} size={size} level="M" marginSize={2} />
-        <small>🔍 Agrandir</small>
+        <small>{t('qr.zoom.button')}</small>
       </button>
 
-      {open && <div className="qr-zoom-backdrop" role="dialog" aria-modal="true" aria-label={`${label} agrandi`} onClick={() => setOpen(false)}>
+      {open && <div className="qr-zoom-backdrop" role="dialog" aria-modal="true" aria-label={t('qr.zoom.expandedAria', { label })} onClick={() => setOpen(false)}>
         <div className="qr-zoom-panel" onClick={(event) => event.stopPropagation()}>
           <div className="qr-zoom-head">
             <strong>{label}</strong>
-            <button type="button" onClick={() => setOpen(false)}>Fermer</button>
+            <button type="button" onClick={() => setOpen(false)}>{t('qr.close')}</button>
           </div>
           <div className="qr-zoom-code">
             <QRCodeSVG value={value} size={420} level="M" marginSize={3} />
           </div>
-          <small>QR agrandi automatiquement. Aucun zoom manuel du navigateur n’est nécessaire.</small>
+          <small>{t('qr.zoom.note')}</small>
         </div>
       </div>}
     </>

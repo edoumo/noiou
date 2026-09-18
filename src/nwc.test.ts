@@ -1,4 +1,5 @@
 import { describe, expect, it } from 'vitest';
+import { t } from './i18n';
 import { assertSafeNwcPolicy, parseNwcUri, redactNwcDescriptor, SAFE_NWC_POLICY } from './nwc';
 
 const pubkey = 'a'.repeat(64);
@@ -14,11 +15,11 @@ describe('NWC safety boundary', () => {
   });
 
   it('rejects insecure relay URLs', () => {
-    expect(() => parseNwcUri(`nostr+walletconnect://${pubkey}?relay=${encodeURIComponent('ws://relay.example')}&secret=${secret}`)).toThrow(/secure wss/i);
+    expect(() => parseNwcUri(`nostr+walletconnect://${pubkey}?relay=${encodeURIComponent('ws://relay.example')}&secret=${secret}`)).toThrow(t('error.nwcRelayRequired'));
   });
 
   it('keeps live outgoing payments disabled', () => {
     expect(() => assertSafeNwcPolicy(SAFE_NWC_POLICY)).not.toThrow();
-    expect(() => assertSafeNwcPolicy({ ...SAFE_NWC_POLICY, allowOutgoingPayments: true })).toThrow(/disabled/i);
+    expect(() => assertSafeNwcPolicy({ ...SAFE_NWC_POLICY, allowOutgoingPayments: true })).toThrow(t('error.nwcOutgoingDisabled'));
   });
 });

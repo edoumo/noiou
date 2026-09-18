@@ -1,3 +1,4 @@
+import { t } from './i18n';
 import { verifyLedger } from './ledger';
 import { parseSession, serializeSession, type SessionSnapshot } from './session';
 
@@ -19,7 +20,7 @@ async function sha256(input: string): Promise<string> {
 }
 
 export async function createSessionBackup(snapshot: SessionSnapshot, createdAt = new Date().toISOString()): Promise<string> {
-  if (!await verifyLedger(snapshot.ledger)) throw new Error('Cannot export a session with an invalid audit ledger');
+  if (!await verifyLedger(snapshot.ledger)) throw new Error(t('error.backupLedgerInvalid'));
   const canonicalSnapshot = serializeSession(snapshot);
   const envelope: SessionBackupEnvelope = {
     format: BACKUP_FORMAT,
@@ -33,15 +34,15 @@ export async function createSessionBackup(snapshot: SessionSnapshot, createdAt =
 
 export async function parseSessionBackup(raw: string): Promise<SessionSnapshot> {
   const parsed: unknown = JSON.parse(raw);
-  if (!parsed || typeof parsed !== 'object') throw new Error('Invalid NOIOU backup');
+  if (!parsed || typeof parsed !== 'object') throw new Error(t('error.backupInvalid'));
   const envelope = parsed as Partial<SessionBackupEnvelope>;
-  if (envelope.format !== BACKUP_FORMAT || envelope.version !== BACKUP_VERSION) throw new Error('Unsupported NOIOU backup format');
-  if (!envelope.snapshot || typeof envelope.digest !== 'string') throw new Error('Incomplete NOIOU backup');
+  if (envelope.format !== BACKUP_FORMAT || envelope.version !== BACKUP_VERSION) throw new Error(t('error.backupUnsupported'));
+  if (!envelope.snapshot || typeof envelope.digest !== 'string') throw new Error(t('error.backupIncomplete'));
 
   const snapshot = parseSession(JSON.stringify(envelope.snapshot));
   const digest = await sha256(serializeSession(snapshot));
-  if (digest !== envelope.digest) throw new Error('Backup integrity check failed');
-  if (!await verifyLedger(snapshot.ledger)) throw new Error('Backup audit ledger is invalid');
+  if (digest !== envelope.digest) throw new Error(t('error.backupDigest'));
+  if (!await verifyLedger(snapshot.ledger)) throw new Error(t('error.backupLedgerCheck'));
   return snapshot;
 }
 

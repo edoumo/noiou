@@ -1,4 +1,5 @@
 import { describe, expect, it } from 'vitest';
+import { t } from './i18n';
 import { createSessionBackup, parseSessionBackup } from './backup';
 import { appendLedgerEvent } from './ledger';
 import { createEmptySession } from './session';
@@ -42,6 +43,6 @@ describe('portable backups', () => {
     const raw = await createSessionBackup(session);
     const tampered = JSON.parse(raw) as { snapshot: { game: { buyInAmount: number } } };
     tampered.snapshot.game.buyInAmount = 999;
-    await expect(parseSessionBackup(JSON.stringify(tampered))).rejects.toThrow(/integrity/i);
+    await expect(parseSessionBackup(JSON.stringify(tampered))).rejects.toThrow(t('error.backupDigest'));
   });
 });

@@ -1,4 +1,5 @@
 import { describe, expect, it } from 'vitest';
+import { t } from './i18n';
 import { MockLightningAdapter } from './lightning';
 
 describe('MockLightningAdapter', () => {
@@ -20,9 +21,9 @@ describe('MockLightningAdapter', () => {
 
   it('rejects invalid invoice and payment amounts', async () => {
     const adapter = new MockLightningAdapter();
-    await expect(adapter.createInvoice(0)).rejects.toThrow(/positive integer/);
-    await expect(adapter.createInvoice(1.5)).rejects.toThrow(/positive integer/);
-    await expect(adapter.preparePayment('alice@example.test', -1)).rejects.toThrow(/positive integer/);
+    await expect(adapter.createInvoice(0)).rejects.toThrow(t('error.invoiceAmountPositiveInteger'));
+    await expect(adapter.createInvoice(1.5)).rejects.toThrow(t('error.invoiceAmountPositiveInteger'));
+    await expect(adapter.preparePayment('alice@example.test', -1)).rejects.toThrow(t('error.paymentAmountPositiveInteger'));
   });
 
   it('prepares and confirms a payment idempotently', async () => {

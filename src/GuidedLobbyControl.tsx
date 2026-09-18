@@ -1,5 +1,6 @@
 import { useEffect, useRef, useState } from 'react';
 import { createPortal } from 'react-dom';
+import { useI18n } from './i18n/provider';
 import { isPlayStarted, MIN_POKER_PLAYERS } from './lobby';
 import { buyInAttentionState, firstOutstandingBuyInPlayerId } from './lobbyGuidance';
 import { readPageOrigin, startPendingJoinLanding } from './joinLanding';
@@ -39,6 +40,7 @@ function scrollToTarget(id: string) {
 }
 
 export default function GuidedLobbyControl() {
+  const { t } = useI18n();
   const [snapshot, setSnapshot] = useState<SessionSnapshot | null>(() => readSnapshot());
   const [readyGameId, setReadyGameId] = useState(() => readReadyGameId());
   const [editingPlayers, setEditingPlayers] = useState(false);
@@ -200,24 +202,24 @@ export default function GuidedLobbyControl() {
   const control = (() => {
     if (!playStarted && !rosterReady && players.length >= MIN_POKER_PLAYERS) {
       return <div className="lobby-director" aria-live="polite">
-        <strong>{players.length} joueurs ajoutés</strong>
+        <strong>{t('lobby.playersAdded', { count: players.length })}</strong>
         <small className="lobby-roster-names">{players.map((player) => player.nickname).join(' · ')}</small>
-        <small>Quand la table est prête, passe aux caves. Tu pourras encore ajouter quelqu’un ensuite si nécessaire.</small>
-        <button type="button" className="primary wide" onClick={moveToCollections}>✓ Tous les joueurs sont ajoutés — Passer aux caves</button>
+        <small>{t('lobby.rosterNote')}</small>
+        <button type="button" className="primary wide" onClick={moveToCollections}>{t('lobby.moveToCollections')}</button>
       </div>;
     }
 
     if ((!playStarted && rosterReady) || playStarted) {
       if (editingPlayers) {
         return <div className="lobby-director compact" aria-live="polite">
-          <small>{playStarted ? 'Ajoute le nouveau joueur puis NOIOU reviendra automatiquement à sa cave.' : 'Ajoute un joueur si nécessaire, puis reviens aux caves.'}</small>
-          <button type="button" onClick={closePlayerEditor}>↩ Replier l’ajout de joueur</button>
+          <small>{playStarted ? t('lobby.editPlayingNote') : t('lobby.editNote')}</small>
+          <button type="button" onClick={closePlayerEditor}>{t('lobby.collapseEditor')}</button>
         </div>;
       }
       return <div className="lobby-director compact" aria-live="polite">
-        <strong>{playStarted ? 'Table en cours' : 'Liste des joueurs prête'}</strong>
-        <small>{playStarted ? 'L’ajout reste disponible sans encombrer la partie.' : 'Les joueurs qui nécessitent encore une action sont surlignés ci-dessous.'}</small>
-        <button type="button" onClick={openPlayerEditor}>{playStarted ? '＋ Ajouter un joueur en cours de partie' : '＋ Ajouter un autre joueur'}</button>
+        <strong>{playStarted ? t('lobby.tableRunning') : t('lobby.rosterReady')}</strong>
+        <small>{playStarted ? t('lobby.tableRunningNote') : t('lobby.highlightNote')}</small>
+        <button type="button" onClick={openPlayerEditor}>{playStarted ? t('lobby.addInGame') : t('lobby.addAnother')}</button>
       </div>;
     }
 

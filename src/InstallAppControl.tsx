@@ -1,4 +1,5 @@
 import { useEffect, useState } from 'react';
+import { useI18n } from './i18n/provider';
 import './install-app.css';
 
 interface InstallPromptEvent extends Event {
@@ -26,6 +27,7 @@ function isMobileLike(): boolean {
 }
 
 export default function InstallAppControl() {
+  const { t } = useI18n();
   const [promptEvent, setPromptEvent] = useState<InstallPromptEvent | null>(null);
   const [installed, setInstalled] = useState(() => isStandalone());
   const [dismissed, setDismissed] = useState(() => {
@@ -90,17 +92,17 @@ export default function InstallAppControl() {
     <section className="install-app" aria-live="polite">
       <div className="install-app-inner">
         <div className="install-app-copy">
-          <strong>Installer NOIOU</strong>
-          <small>Ajoute l’application à l’écran d’accueil et ouvre-la en plein écran.</small>
+          <strong>{t('pwa.install')}</strong>
+          <small>{t('pwa.installNote')}</small>
         </div>
         <div className="install-app-actions">
           <button className="install-app-button" type="button" onClick={() => void install()}>
-            ⬇ Installer l’app
+            {t('pwa.installButton')}
           </button>
           <button
             className="install-app-dismiss"
             type="button"
-            aria-label="Ne plus proposer l’installation"
+            aria-label={t('pwa.dismiss')}
             onClick={dismiss}
           >
             ✕
@@ -109,9 +111,7 @@ export default function InstallAppControl() {
       </div>
       {showInstallHelp && (
         <div className="install-app-help">
-          {ios
-            ? <>Sur iPhone/iPad : ouvre le menu <strong>Partager</strong>, puis choisis <strong>Sur l’écran d’accueil</strong>.</>
-            : <>Sur Android : ouvre le menu du navigateur puis choisis <strong>Installer l’application</strong> ou <strong>Ajouter à l’écran d’accueil</strong>.</>}
+          {ios ? <>{t('pwa.iosHelp')}</> : <>{t('pwa.androidHelp')}</>}
         </div>
       )}
     </section>
