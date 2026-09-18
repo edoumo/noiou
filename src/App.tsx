@@ -131,7 +131,7 @@ interface BootSession {
  * An active local session whose receive mode resolved to mock (or to nothing, the old
  * default) must never keep creating fictional invoices or count fictional receipts as
  * real money: at boot we migrate it to the explicit external/manual flow, cancel every
- * fictional cave/rebuy and let the organizer re-collect them through a real flow.
+ * fictional cave/recave (rebuy) and let the organizer re-collect them through a real flow.
  * Development/test builds keep the mock available and skip the migration entirely.
  */
 function readBootSession(): BootSession {
@@ -146,7 +146,7 @@ function readBootSession(): BootSession {
   const details = plan.historicalMockReceiptsRemain
     ? 'Son historique reste consultable, mais elle n’accepte plus aucune nouvelle cave fictive.'
     : cancelledCount > 0
-      ? `${cancelledCount} cave(s)/rebuy fictif(s) ont été annulés pour ne jamais compter comme de l’argent réel. Réencaisse-les via le wallet réel avant de démarrer ou régler la partie.`
+      ? `${cancelledCount} cave(s)/recave(s) (rebuy) fictif(s) ont été annulés pour ne jamais compter comme de l’argent réel. Réencaisse-les via le wallet réel avant de démarrer ou régler la partie.`
       : 'Aucun encaissement fictif n’était en cours : la partie peut continuer en wallet externe.';
   return {
     session: { ...stored, game: plan.game, contributions: plan.contributions },
@@ -377,7 +377,7 @@ export default function App() {
     if (!Number.isInteger(chipsPerBuyIn) || chipsPerBuyIn <= 0) throw new Error('Le nombre de jetons par cave doit être un entier positif');
     if (currency !== 'SATS' && btcFiatRate <= 0) throw new Error('Un taux BTC/fiat positif est requis pour les paiements Lightning');
     assertReceiveModeAllowed(lightningReceiveMode, RUNTIME.allowMockPayments);
-    if (lightningReceiveMode === 'NWC_RECEIVE_ONLY' && currency !== 'SATS') throw new Error('Alpha NWC réel : les caves et rebuys Lightning réels sont limités aux parties en SATS dans cette version.');
+    if (lightningReceiveMode === 'NWC_RECEIVE_ONLY' && currency !== 'SATS') throw new Error('Alpha NWC réel : les caves et recaves (rebuys) Lightning réels sont limités aux parties en SATS dans cette version.');
     if (lightningReceiveMode === 'NWC_RECEIVE_ONLY' && !nwc.connected) throw new Error('Connecte et arme explicitement un wallet NWC receive-only avant de préparer une partie en mode NWC réel');
     if (dealerEnabled && dealerMode !== 'NONE' && dealerValue < 0) throw new Error('La rémunération du dealer ne peut pas être négative');
     if (dealerEnabled && dealerMode === 'PERCENT' && dealerValue > 100) throw new Error('Le pourcentage dealer ne peut pas dépasser 100 %');
@@ -491,8 +491,8 @@ export default function App() {
     if (!game) throw new Error('Aucune partie');
     await assertLedgerIntegrity();
     if (kind === 'BUYIN' && hasOpenBuyIn(player.id)) throw new Error('Une cave existe déjà pour ce joueur');
-    if (kind === 'REBUY' && !isPlayStarted(game)) throw new Error('Les rebuys sont disponibles après le démarrage de la partie');
-    if (kind === 'REBUY' && !hasPaidBuyIn(player.id)) throw new Error('La cave initiale doit être encaissée avant un rebuy');
+    if (kind === 'REBUY' && !isPlayStarted(game)) throw new Error('Les recaves (rebuys) sont disponibles après le démarrage de la partie');
+    if (kind === 'REBUY' && !hasPaidBuyIn(player.id)) throw new Error('La cave initiale doit être encaissée avant une recave (rebuy)');
 
     const contribution = createContribution(game, player.id, kind, 'CASH');
     const created = [...contributions, contribution];
@@ -514,7 +514,7 @@ export default function App() {
   async function addOrganizerContribution(player: Player, kind: ContributionKind) {
     if (!game) throw new Error('Aucune partie');
     await assertLedgerIntegrity();
-    if (kind === 'REBUY' && !isPlayStarted(game)) throw new Error('Les rebuys sont disponibles après le démarrage de la partie');
+    if (kind === 'REBUY' && !isPlayStarted(game)) throw new Error('Les recaves (rebuys) sont disponibles après le démarrage de la partie');
     const allocated = allocateOrganizerWalletContribution(game, player, kind, contributions);
     setContributions(allocated.contributions);
     await record(game.id, kind === 'BUYIN' ? 'BUYIN_CREATED' : 'REBUY_CREATED', {
@@ -558,8 +558,8 @@ export default function App() {
     if (!game) throw new Error('Aucune partie');
     await assertLedgerIntegrity();
     if (kind === 'BUYIN' && hasOpenBuyIn(player.id)) throw new Error('Une cave existe déjà pour ce joueur');
-    if (kind === 'REBUY' && !isPlayStarted(game)) throw new Error('Les rebuys sont disponibles après le démarrage de la partie');
-    if (kind === 'REBUY' && !hasPaidBuyIn(player.id)) throw new Error('La cave initiale doit être encaissée avant un rebuy');
+    if (kind === 'REBUY' && !isPlayStarted(game)) throw new Error('Les recaves (rebuys) sont disponibles après le démarrage de la partie');
+    if (kind === 'REBUY' && !hasPaidBuyIn(player.id)) throw new Error('La cave initiale doit être encaissée avant une recave (rebuy)');
 
     const contribution = createContribution(game, player.id, kind, 'LIGHTNING');
     const sats = toSats(contribution.amount, game);
@@ -601,7 +601,7 @@ export default function App() {
     const memo = traceLabel;
     let invoice: LightningInvoice;
     if (receiveMode === 'NWC_RECEIVE_ONLY') {
-      if (!nwc.connected) throw new Error('Cette partie utilise NWC réel : reconnecte le wallet receive-only avant de créer une nouvelle cave/rebuy');
+      if (!nwc.connected) throw new Error('Cette partie utilise NWC réel : reconnecte le wallet receive-only avant de créer une nouvelle cave/recave (rebuy)');
       const created = await nwc.createInvoice(sats, memo);
       invoice = { ...created, traceLabel, preparedBy: 'NWC' };
     } else {
@@ -1011,8 +1011,8 @@ export default function App() {
       {sessionRestored && <div className="session-note"><span>Session locale restaurée · aucun secret wallet n’est stocké. Une invoice NWC en attente nécessite de reconnecter le wallet pour vérifier son paiement.</span><button onClick={() => setSessionRestored(false)}>OK</button></div>}
       {migrationNotice && <div className="session-note migration-note"><span>🔄 {migrationNotice}</span><button onClick={() => setMigrationNotice('')}>OK</button></div>}
       {game?.lightningReceiveMode === 'EXTERNAL_WALLET_MANUAL' && <div className="session-note live-note"><span>⚡ Wallet Lightning externe : NOIOU prépare ou vérifie une invoice du montant exact avant de l’afficher au joueur. L’organisateur confirme la réception uniquement après vérification dans son wallet.</span></div>}
-      {nwcMode === 'LIVE_ARMED' && <div className="session-note live-note"><span>⚡ Réception NWC réelle armée{nwc.connection?.alias ? ` · ${nwc.connection.alias}` : ''}. Les caves/rebuys créditent directement le wallet de l’organisateur. Les payouts restent manuels hors NOIOU.</span></div>}
-      {nwcMode === 'RECONNECT_REQUIRED' && <div className="session-note reconnect-note"><span>⚠️ Cette partie est verrouillée en NWC réel mais le wallet est déconnecté. Reconnecte le même wallet receive-only avant toute nouvelle cave/rebuy ou vérification d’invoice.</span></div>}
+      {nwcMode === 'LIVE_ARMED' && <div className="session-note live-note"><span>⚡ Réception NWC réelle armée{nwc.connection?.alias ? ` · ${nwc.connection.alias}` : ''}. Les caves/recaves (rebuys) créditent directement le wallet de l’organisateur. Les payouts restent manuels hors NOIOU.</span></div>}
+      {nwcMode === 'RECONNECT_REQUIRED' && <div className="session-note reconnect-note"><span>⚠️ Cette partie est verrouillée en NWC réel mais le wallet est déconnecté. Reconnecte le même wallet receive-only avant toute nouvelle cave/recave (rebuy) ou vérification d’invoice.</span></div>}
       {nwcMode === 'DIAGNOSTIC' && <div className="session-note"><span>Wallet NWC connecté en diagnostic uniquement. Les caves de partie ne deviennent NWC réelles que si tu sélectionnes NWC automatique et armes explicitement la réception.</span></div>}
       {game && <div className="save-note">Sauvegarde locale automatique {lastSavedAt ? `· ${new Date(lastSavedAt).toLocaleTimeString('fr-FR')}` : ''}</div>}
       {backupStatus && <div className="session-note"><span>{backupStatus}</span><button onClick={() => setBackupStatus('')}>OK</button></div>}
@@ -1040,7 +1040,7 @@ export default function App() {
                 <option value="EUR">EUR</option><option value="USD">USD</option><option value="SATS">SATS</option>
               </select>
             </label>
-            <label>Cave / rebuy
+            <label>Cave / recave (rebuy)
               <input type="number" min="1" step={currency === 'SATS' ? 1 : 0.01} value={buyIn} onChange={(event) => setBuyIn(Number(event.target.value))} />
             </label>
             <label>Jetons remis par cave
@@ -1093,7 +1093,7 @@ export default function App() {
               {dealerMode === 'NONE' && <p className="muted dealer-mode-note">Aucune somme ne sera retirée du pot. Après clôture, chaque joueur pourra enregistrer un tip volontaire séparé.</p>}
             </>}
           </div>
-          {lightningReceiveMode === 'NWC_RECEIVE_ONLY' && <p className="muted">NWC réel exige un wallet connecté et explicitement armé. Chaque invoice de cave/rebuy est plafonnée à {MAX_LIVE_GAME_INVOICE_SATS.toLocaleString('fr-FR')} sats.</p>}
+          {lightningReceiveMode === 'NWC_RECEIVE_ONLY' && <p className="muted">NWC réel exige un wallet connecté et explicitement armé. Chaque invoice de cave/recave (rebuy) est plafonnée à {MAX_LIVE_GAME_INVOICE_SATS.toLocaleString('fr-FR')} sats.</p>}
           {lightningReceiveMode === 'EXTERNAL_WALLET_MANUAL' && <p className="muted impartiality-note">Compatible par capacité, pas par marque. Une Lightning Address ou un LNURL peut permettre à NOIOU de demander automatiquement une invoice exacte ; sinon le fallback est une BOLT11 du montant exact, vérifiée avant affichage.</p>}
           <details className="donation-options donation-details">
             <summary>❤️ Soutenir NOIOU</summary>
@@ -1179,10 +1179,10 @@ export default function App() {
                     </div>;
                   })}
                   {playStarted && buyInPaid && <div className="actions rebuy-actions">
-                    <button className={rebuyActionClass(player.preferredPayment, 'CASH')} onClick={() => setCashRebuyConfirmation(player)}>+ Rebuy espèces</button>
+                    <button className={rebuyActionClass(player.preferredPayment, 'CASH')} onClick={() => setCashRebuyConfirmation(player)}>+ Recave (rebuy) espèces</button>
                     {player.isOrganizer && game.currency === 'SATS'
-                      ? <button className={rebuyActionClass(player.preferredPayment, 'LIGHTNING')} onClick={() => setOrganizerAllocationConfirmation({ player, kind: 'REBUY' })}>+ Rebuy depuis wallet organisateur</button>
-                      : <button className={rebuyActionClass(player.preferredPayment, 'LIGHTNING')} onClick={() => void execute(() => addLightningContribution(player, 'REBUY'))}>+ Rebuy {lightningButtonLabel}</button>}
+                      ? <button className={rebuyActionClass(player.preferredPayment, 'LIGHTNING')} onClick={() => setOrganizerAllocationConfirmation({ player, kind: 'REBUY' })}>+ Recave (rebuy) depuis wallet organisateur</button>
+                      : <button className={rebuyActionClass(player.preferredPayment, 'LIGHTNING')} onClick={() => void execute(() => addLightningContribution(player, 'REBUY'))}>+ Recave (rebuy) {lightningButtonLabel}</button>}
                   </div>}
                 </div>
               );
@@ -1326,7 +1326,7 @@ export default function App() {
         <div><h2>Lightning organisateur</h2><p>{game?.lightningReceiveMode === 'EXTERNAL_WALLET_MANUAL'
           ? 'Wallet externe manuel actif : NOIOU prépare ou valide un QR exact, puis l’organisateur atteste l’encaissement après vérification dans son wallet.'
           : nwcMode === 'LIVE_ARMED'
-            ? `NWC réel armé${nwc.connection?.alias ? ` sur ${nwc.connection.alias}` : ''}. Les caves/rebuys créent de vraies invoices. Les sorties restent manuelles.`
+            ? `NWC réel armé${nwc.connection?.alias ? ` sur ${nwc.connection.alias}` : ''}. Les caves/recaves (rebuys) créent de vraies invoices. Les sorties restent manuelles.`
             : nwcMode === 'RECONNECT_REQUIRED'
               ? 'Partie NWC réelle active, wallet déconnecté : reconnecte le même wallet receive-only. Aucun fallback fictif.'
               : nwcMode === 'DIAGNOSTIC'
@@ -1356,8 +1356,8 @@ export default function App() {
 
       <ConfirmDialog
         open={Boolean(cashRebuyConfirmation && game)}
-        title="Confirmer le rebuy espèces"
-        message={cashRebuyConfirmation && game ? `Confirmer le rebuy de ${formatAmount(game.rebuyAmount ?? game.buyInAmount, game.currency)} pour ${cashRebuyConfirmation.nickname} ?` : ''}
+        title="Confirmer la recave (rebuy) en espèces"
+        message={cashRebuyConfirmation && game ? `Confirmer la recave (rebuy) de ${formatAmount(game.rebuyAmount ?? game.buyInAmount, game.currency)} pour ${cashRebuyConfirmation.nickname} ?` : ''}
         confirmLabel="Confirmer l’encaissement"
         onCancel={() => setCashRebuyConfirmation(null)}
         onConfirm={() => void execute(confirmCashRebuy)}
@@ -1365,7 +1365,7 @@ export default function App() {
 
       <ConfirmDialog
         open={Boolean(organizerAllocationConfirmation && game)}
-        title={organizerAllocationConfirmation?.kind === 'REBUY' ? 'Confirmer le rebuy organisateur' : 'Confirmer la cave organisateur'}
+        title={organizerAllocationConfirmation?.kind === 'REBUY' ? 'Confirmer la recave (rebuy) organisateur' : 'Confirmer la cave organisateur'}
         message={organizerAllocationConfirmation && game ? `Affecter ${formatAmount(organizerAllocationConfirmation.kind === 'REBUY' ? (game.rebuyAmount ?? game.buyInAmount) : game.buyInAmount, game.currency)} déjà présents dans le wallet organisateur à la cagnotte de ${organizerAllocationConfirmation.player.nickname} ? Aucun transfert Lightning vers soi ne sera créé.` : ''}
         confirmLabel="Affecter à la cagnotte"
         onCancel={() => setOrganizerAllocationConfirmation(null)}
