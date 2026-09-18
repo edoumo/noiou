@@ -1,8 +1,8 @@
 .install-app{
   position:fixed;
-  right:14px;
-  bottom:14px;
-  z-index:90;
+  right:calc(16px + env(safe-area-inset-right,0px));
+  bottom:calc(72px + env(safe-area-inset-bottom,0px));
+  z-index:89;
   display:flex;
   flex-direction:column;
   align-items:flex-end;
@@ -10,8 +10,8 @@
   max-width:min(360px,calc(100vw - 28px));
 }
 .install-app-button{
-  min-height:46px;
-  padding:10px 15px;
+  min-height:44px;
+  padding:9px 14px;
   border:1px solid #111827;
   border-radius:12px;
   background:#111827;
@@ -20,6 +20,11 @@
 }
 .install-app-button:hover{background:#1f2937}
 .install-app-help{
+  position:absolute;
+  bottom:calc(100% + 8px);
+  right:0;
+  width:max-content;
+  max-width:min(360px,calc(100vw - 28px));
   padding:11px 13px;
   border:1px solid #d1d5db;
   border-radius:12px;
@@ -40,11 +45,22 @@
 }
 @media(max-width:640px){
   .install-app{
-    left:12px;
-    right:12px;
-    bottom:12px;
-    align-items:stretch;
-    max-width:none;
+    left:calc(12px + env(safe-area-inset-left,0px));
+    right:auto;
+    bottom:calc(16px + env(safe-area-inset-bottom,0px));
+    align-items:flex-start;
+    max-width:calc(100vw - 24px - env(safe-area-inset-left,0px) - env(safe-area-inset-right,0px));
   }
-  .install-app-button{width:100%}
+  .install-app-button{
+    width:auto;
+    font-size:.85rem;
+    padding:9px 13px;
+  }
+  .install-app-help{
+    right:auto;
+    left:0;
+    width:max-content;
+    max-width:min(320px,calc(100vw - 24px));
+    font-size:.8rem;
+  }
 }
