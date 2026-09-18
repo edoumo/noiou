@@ -1,14 +1,13 @@
-# NOIOU V1.0.0-rc1 — status
+# NOIOU V1.0.0-rc1 — status (historical)
 
 ```
 status=RC1_FROZEN
 tag=v1.0.0-rc1
 commit=ebce45af9e95668c379ed744c0739de785bcfc52
-vm=126
 tests=145/145 PASS
 health=PASS
 rollback=READY
-mainnet_receive_test=PENDING
+mainnet_receive_test=COMPLETED (PASS, 2026-09-18)
 outbound_lightning=DISABLED
 ```
 
@@ -17,32 +16,28 @@ outbound_lightning=DISABLED
 - Tag `v1.0.0-rc1` (annotated) points exactly at
   `ebce45af9e95668c379ed744c0739de785bcfc52`, the merge commit of the UX27
   readiness work (PR #32). Verified locally and on `origin`.
-- No application code changes are allowed in RC1 without a new candidate.
-  Documentation may be added after the freeze without moving the tag.
+- No application code changes were allowed in RC1 without a new candidate.
 - CI on the RC1 commit: `quality` workflow = success (production dependency
   audit, strict typecheck, 145 tests, application build, hardened Docker
   container smoke test).
-- Deployed on VM126 (`noiou-alpha-app`, image digest recorded in the release
-  evidence bundle), healthy, no host ports published.
-- Rollback image: `noiou-alpha-app:926fa4c-rollback-ux27` (previous UX26-F1
-  build `af3cbe8e1721`); rollback source tree: `/opt/noiou-src.old-ux27`.
+- Deployed healthy with no host ports published.
+- Rollback image and previous source tree were preserved.
 
 ## Production gate
 
 > RC1 is functionally validated. Before any real-funds production use, a
 > controlled mainnet Lightning receive test must be completed.
 
-The mainnet receive test validates the real boundary: funding wallet →
-Lightning mainnet → receive-only NWC wallet → NOIOU invoice detection → PAID
-state → audit ledger → persistence. It requires a human-authorized real
-payment of a minimal amount and is tracked as `mainnet_receive_test=PENDING`
-until performed.
+The controlled mainnet receive test was completed: a real 5000-sat payment
+settled (`completedAt` recorded), the preimage was verified against the
+payment hash, NOIOU flipped the contribution to `PAID`, the audit ledger
+stayed valid, and the state survived reload and container restart
+(`mainnet_receive_test=PASS`, 2026-09-18).
 
-Final V1 (`v1.0.0`) will only be tagged after that test passes and an explicit
-promotion decision.
+On this basis the validated code was promoted to `v1.0.0` (same commit
+`ebce45af9e95668c379ed744c0739de785bcfc52`).
 
 ## Evidence
 
-- UX27 readiness: `/home/edou/qa-artifacts/noiou/alpha-deploy/ux27-prod-readiness-evidence.tar.gz`
-  (sha256 `d3c529a7f34c61d51cc9127be99c517312beb64824f72a052f12ef0fb3081423`)
-- RC1 evidence bundle: `/home/edou/qa-artifacts/noiou/release/noiou-v1.0.0-rc1-evidence.tar.gz`
+- UX27 readiness evidence bundle and RC1 evidence bundle are kept with the
+  release operations records (not distributed in this repository).

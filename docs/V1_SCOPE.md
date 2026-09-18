@@ -10,7 +10,7 @@ NOIOU is a settlement companion for physical poker games. Cards, chips, dealing,
 - fixed buy-in and rebuy amount per game;
 - physical cash confirmation;
 - Bitcoin Lightning through an adapter boundary;
-- private bootstrap uses mock Lightning only;
+- real Lightning receive flows through an adapter boundary: receive-only NWC (automatic) or external-wallet manual receipt; the mock Lightning path is a development/test tool only;
 - optional dealer compensation configured before the game;
 - player pseudonyms without civil identity/KYC requirements in the product model;
 - physical final-chip count;
@@ -41,4 +41,3 @@ NOIOU is a settlement companion for physical poker games. Cards, chips, dealing,
 - bank cards or bank accounts;
 - KYC;
 - project advertising/monetization beyond future voluntary donations;
-- public deployment during private incubation.

@@ -1,6 +1,6 @@
-# Security policy (private incubation)
+# Security policy
 
-NOIOU is not production-ready. Real funds are permitted only for deliberately tiny, controlled private-alpha **receive-only NWC** tests under the safeguards below. Public/commercial use and autonomous outgoing Lightning payments remain out of scope.
+NOIOU v1.0.0 is deployed in production. Real funds are supported only for **receive-only** Lightning buy-ins credited to the organizer's own wallet, under the safeguards below. Autonomous outgoing Lightning payments remain out of scope; legal validation is still required before commercial operation.
 
 ## Security invariants
 
@@ -8,7 +8,7 @@ NOIOU is not production-ready. Real funds are permitted only for deliberately ti
 - No omnibus wallet and no internal BTC balances held on behalf of users.
 - Real Lightning game receipts use receive-only NWC permissions; outgoing payment capabilities are rejected.
 - The NWC credential stays in browser memory and is never stored in the generic session snapshot, backup, audit ledger, container environment, or static bundle.
-- Real NWC game receipts are **SATS-only** in the current alpha; EUR/USD remain limited to cash or the external-wallet flow until money representation is migrated away from generic JavaScript-number fiat arithmetic.
+- Real NWC game receipts are **SATS-only**; EUR/USD remain limited to cash or the external-wallet flow until money representation is migrated away from generic JavaScript-number fiat arithmetic.
 - The mock "fictional payment" receive mode is compiled out of the production experience: it is unavailable in production builds, rejected by runtime guards, and legacy sessions that used it are migrated to the explicit external/manual flow with fictional receipts cancelled.
 - All money-changing operations must be idempotent.
 - A paid contribution may issue value once only.
@@ -35,7 +35,7 @@ NOIOU is not production-ready. Real funds are permitted only for deliberately ti
 - A SHA-256 chained append-only event ledger detects payload modification, event deletion and reordering.
 - Portable backups include an integrity digest and ledger verification; NWC credentials are excluded.
 - CI runs production dependency audit, strict TypeScript checking, automated tests, application build, production Docker build, and a hardened-container health smoke test.
-- The private alpha is deployed behind an authenticated origin and Cloudflare Tunnel with no application host port published.
+- The application is deployed behind Cloudflare Tunnel with no application host port published; production and hors-production environments are fully separated (containers, networks, credentials, data).
 
 ## Threats before public release
 

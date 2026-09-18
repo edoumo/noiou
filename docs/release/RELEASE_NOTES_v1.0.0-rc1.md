@@ -3,8 +3,9 @@
 First NOIOU V1 release candidate. Tagged after the UX27 production readiness
 gate (mock retirement + Lightning receive qualification).
 
-**This is not the final V1.** Before any real-funds production use, a controlled
-mainnet Lightning receive test must be completed. See
+**Historical document.** This is the release candidate that preceded the
+first stable release. The required controlled mainnet Lightning receive test
+was completed successfully and the same code was promoted to `v1.0.0`. See
 `docs/release/V1_RC1_STATUS.md`.
 
 ## What is in RC1
@@ -47,7 +48,7 @@ mainnet Lightning receive test must be completed. See
   external-wallet flow.
 - Per-invoice alpha ceiling: 250,000 sats.
 - Local persistence (browser localStorage, no backend).
-- **Mainnet receive test: PENDING** — required before V1 final.
+- **Mainnet receive test: COMPLETED (PASS)** — the required controlled test passed before V1 final.
 
 ## Verification summary
 
@@ -55,5 +56,5 @@ mainnet Lightning receive test must be completed. See
 - RC1 commit: `ebce45af9e95668c379ed744c0739de785bcfc52` (merge of UX27 PR #32)
 - UX27 fix commit: `950e5a51975705ec33b114b2e70e02f391efde7d`
 - CI on RC1 commit: quality = success
-- Deployment: VM126, container `noiou-alpha-app` healthy, no host ports
-  published, `https://alpha.noiou.io` authenticated alpha (anon 401 / auth 200).
+  deployment: container healthy, no host ports published, authenticated
+  private origin (anon 401 / auth 200).

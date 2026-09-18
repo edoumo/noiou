@@ -16,7 +16,7 @@ NOIOU is a local-first PWA for tracking money around a physical poker table. It 
 
 NOIOU must never require or store a wallet seed or private key. Future NWC integration should use the minimum capabilities required and keep spending credentials on the organizer's device whenever feasible. A hosted backend must not become an omnibus wallet or maintain crypto balances for users.
 
-The current private prototype uses only a mock Lightning adapter. It cannot move real funds.
+Real incoming value flows through receive-only NWC or the external-wallet manual receipt flow. NOIOU cannot move funds out, never takes custody, and never stores seeds or private keys.
 
 ## Accounting boundaries
 
