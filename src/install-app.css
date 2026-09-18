@@ -44,11 +44,13 @@
   border-color:#334155;
 }
 @media(max-width:640px){
+  /* Mobile: sit in the right column above the settings pill, so the left
+     rail stays reserved for the new-game FAB and the QR launcher. */
   .install-app{
-    left:calc(12px + env(safe-area-inset-left,0px));
-    right:auto;
-    bottom:calc(16px + env(safe-area-inset-bottom,0px));
-    align-items:flex-start;
+    left:auto;
+    right:calc(12px + env(safe-area-inset-right,0px));
+    bottom:calc(64px + env(safe-area-inset-bottom,0px));
+    align-items:flex-end;
     max-width:calc(100vw - 24px - env(safe-area-inset-left,0px) - env(safe-area-inset-right,0px));
   }
   .install-app-button{
@@ -56,14 +58,22 @@
     font-size:.85rem;
     padding:9px 13px;
   }
-  /* iOS help: open ABOVE the whole bottom-left floating stack
-     (new-game FAB 44px + QR launcher 44px + gaps) so it never covers them. */
+  /* iOS help: open ABOVE the whole floating stack (QR launcher + FAB line)
+     so it never covers them; anchored right with the button. */
   .install-app-help{
-    right:auto;
-    left:0;
+    right:0;
+    left:auto;
     bottom:calc(100% + 116px);
     width:max-content;
     max-width:min(320px,calc(100vw - 24px));
     font-size:.8rem;
   }
+}
+/* Below 380px keep a shorter label so the install button can never reach
+   the new-game FAB sharing the same bottom line. */
+.install-app-label-short{display:none}
+@media(max-width:380px){
+  .install-app-label-full{display:none}
+  .install-app-label-short{display:inline}
+  .install-app-button{font-size:.8rem;padding:8px 10px}
 }

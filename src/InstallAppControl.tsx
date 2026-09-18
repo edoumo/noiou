@@ -60,7 +60,7 @@ export default function InstallAppControl() {
   return (
     <aside className="install-app" aria-live="polite">
       <button className="install-app-button" type="button" onClick={() => void install()}>
-        ⬇ Installer l’app
+        ⬇ <span className="install-app-label-full">Installer l’app</span><span className="install-app-label-short">Installer</span>
       </button>
       {showIosHelp && (
         <div className="install-app-help">
