@@ -13,7 +13,7 @@ Current registered locales:
 - Portuguese (Portugal and Brazil), Romanian, Russian, Slovenian, Slovak, Swedish, Turkish
 - Ukrainian, Uzbek, Vietnamese, Simplified Chinese, Traditional Chinese
 
-During the private alpha the main application copy remains predominantly French. The selector persists the preferred locale and updates the document language immediately; full catalogs will be filled after workflow stabilization.
+The locale registry is only a foundation. Until full application catalogs are implemented, production builds must not expose a language selector that suggests the whole app is translated. The selector is therefore development-only; production remains explicitly French. Full catalogs must be implemented and verified before the selector is re-enabled in production.
 
 ## Haptics and sounds
 
