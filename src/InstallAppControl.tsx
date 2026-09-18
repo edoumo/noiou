@@ -19,6 +19,12 @@ function isIos(): boolean {
   return /iphone|ipad|ipod/i.test(navigator.userAgent);
 }
 
+function isMobileLike(): boolean {
+  if (typeof navigator === 'undefined' || typeof window === 'undefined') return false;
+  return /android|iphone|ipad|ipod|mobile/i.test(navigator.userAgent)
+    || window.matchMedia('(pointer: coarse)').matches;
+}
+
 export default function InstallAppControl() {
   const [promptEvent, setPromptEvent] = useState<InstallPromptEvent | null>(null);
   const [installed, setInstalled] = useState(() => isStandalone());
@@ -29,7 +35,7 @@ export default function InstallAppControl() {
       return false;
     }
   });
-  const [showIosHelp, setShowIosHelp] = useState(false);
+  const [showInstallHelp, setShowInstallHelp] = useState(false);
 
   useEffect(() => {
     const onBeforeInstall = (event: Event) => {
@@ -39,7 +45,7 @@ export default function InstallAppControl() {
     const onInstalled = () => {
       setInstalled(true);
       setPromptEvent(null);
-      setShowIosHelp(false);
+      setShowInstallHelp(false);
     };
     window.addEventListener('beforeinstallprompt', onBeforeInstall);
     window.addEventListener('appinstalled', onInstalled);
@@ -51,7 +57,8 @@ export default function InstallAppControl() {
 
   if (installed || dismissed) return null;
   const ios = isIos();
-  if (!promptEvent && !ios) return null;
+  const mobile = isMobileLike();
+  if (!promptEvent && !mobile) return null;
 
   function dismiss() {
     setDismissed(true);
@@ -72,7 +79,7 @@ export default function InstallAppControl() {
       }
       return;
     }
-    if (ios) setShowIosHelp((current) => !current);
+    setShowInstallHelp((current) => !current);
   }
 
   // In-flow banner (no fixed positioning): it scrolls away with the page, so
@@ -100,9 +107,11 @@ export default function InstallAppControl() {
           </button>
         </div>
       </div>
-      {showIosHelp && (
+      {showInstallHelp && (
         <div className="install-app-help">
-          Sur iPhone/iPad : ouvre le menu <strong>Partager</strong>, puis choisis <strong>Sur l’écran d’accueil</strong>.
+          {ios
+            ? <>Sur iPhone/iPad : ouvre le menu <strong>Partager</strong>, puis choisis <strong>Sur l’écran d’accueil</strong>.</>
+            : <>Sur Android : ouvre le menu du navigateur puis choisis <strong>Installer l’application</strong> ou <strong>Ajouter à l’écran d’accueil</strong>.</>}
         </div>
       )}
     </section>
