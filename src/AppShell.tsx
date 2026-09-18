@@ -2,6 +2,7 @@ import App from './App';
 import CashBuyInConfirmationBoundary from './CashBuyInConfirmationBoundary';
 import GuidedLobbyControl from './GuidedLobbyControl';
 import InteractionPreferences from './InteractionPreferences';
+import InstallAppControl from './InstallAppControl';
 import NwcReceiveDiagnostic from './NwcReceiveDiagnostic';
 import { NwcSessionProvider } from './NwcSessionContext';
 import PartyJoinControl from './PartyJoinControl';
@@ -22,6 +23,7 @@ export default function AppShell() {
       <SessionResetControl />
       <NwcReceiveDiagnostic />
       <InteractionPreferences />
+      <InstallAppControl />
     </NwcSessionProvider>
   );
 }
