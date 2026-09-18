@@ -56,9 +56,12 @@
     font-size:.85rem;
     padding:9px 13px;
   }
+  /* iOS help: open ABOVE the whole bottom-left floating stack
+     (new-game FAB 44px + QR launcher 44px + gaps) so it never covers them. */
   .install-app-help{
     right:auto;
     left:0;
+    bottom:calc(100% + 116px);
     width:max-content;
     max-width:min(320px,calc(100vw - 24px));
     font-size:.8rem;
