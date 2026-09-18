@@ -1018,24 +1018,6 @@ export default function App() {
       {backupStatus && <div className="session-note"><span>{backupStatus}</span><button onClick={() => setBackupStatus('')}>OK</button></div>}
       {error && <div className="alert" role="alert">{error}</div>}
 
-      <details className="card backup-tools backup-details">
-        <summary>
-          <span><strong>Sauvegarde et transfert</strong><small>Facultatif · pour archiver une partie ou la reprendre sur un autre navigateur/appareil.</small></span>
-        </summary>
-        <div className="backup-details-body">
-          <p className="muted">L’export contient l’état de la partie : joueurs, caves/recaves, comptage, règlements et journal d’audit. Aucun secret NWC n’est exporté. L’import restaure cette sauvegarde locale après vérification d’intégrité.</p>
-          <div className="actions">
-            <button disabled={!game} onClick={() => void execute(exportBackup)}>Exporter la partie</button>
-            <button disabled={Boolean(game && game.status !== 'CLOSED')} onClick={() => backupInputRef.current?.click()}>Importer une sauvegarde</button>
-            <input ref={backupInputRef} hidden type="file" accept="application/json,.json" onChange={(event) => {
-              const file = event.target.files?.[0];
-              event.currentTarget.value = '';
-              if (file) void execute(() => importBackup(file));
-            }} />
-          </div>
-        </div>
-      </details>
-
       {!game && (
         <section className="card">
           <div className="section-title"><h2>Créer la partie</h2><span>Réception Lightning : {receiveModeLabel(lightningReceiveMode, RUNTIME.allowMockPayments)}</span></div>
@@ -1326,6 +1308,24 @@ export default function App() {
         <p>{ledger.length} événement(s) append-only · SHA-256 chaîné.</p>
         {ledger.slice(-5).reverse().map((event) => <div className="ledger-event" key={event.id}><span>#{event.sequence} {event.type}</span><code>{event.hash.slice(0, 12)}…</code></div>)}
       </section>
+
+      <details className="card backup-tools backup-details">
+        <summary>
+          <span><strong>Sauvegarde et transfert</strong><small>Facultatif · pour archiver une partie ou la reprendre sur un autre navigateur/appareil.</small></span>
+        </summary>
+        <div className="backup-details-body">
+          <p className="muted">L’export contient l’état de la partie : joueurs, caves/recaves, comptage, règlements et journal d’audit. Aucun secret NWC n’est exporté. L’import restaure cette sauvegarde locale après vérification d’intégrité.</p>
+          <div className="actions">
+            <button disabled={!game} onClick={() => void execute(exportBackup)}>Exporter la partie</button>
+            <button disabled={Boolean(game && game.status !== 'CLOSED')} onClick={() => backupInputRef.current?.click()}>Importer une sauvegarde</button>
+            <input ref={backupInputRef} hidden type="file" accept="application/json,.json" onChange={(event) => {
+              const file = event.target.files?.[0];
+              event.currentTarget.value = '';
+              if (file) void execute(() => importBackup(file));
+            }} />
+          </div>
+        </div>
+      </details>
 
       <section className={`card nwc-preview ${nwcMode === 'RECONNECT_REQUIRED' ? 'nwc-reconnect' : ''}`}>
         <div><h2>Lightning organisateur</h2><p>{game?.lightningReceiveMode === 'EXTERNAL_WALLET_MANUAL'
