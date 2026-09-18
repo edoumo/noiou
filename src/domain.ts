@@ -1,3 +1,5 @@
+import type { LockedRate } from './priceOracle';
+
 export type Currency = 'EUR' | 'USD' | 'SATS';
 export type PaymentMethod = 'CASH' | 'LIGHTNING';
 export type GameStatus = 'DRAFT' | 'OPEN' | 'SETTLING' | 'CLOSED' | 'CANCELLED';
@@ -19,6 +21,7 @@ export type LedgerEventType =
   | 'LIGHTNING_MANUAL_REQUEST_CREATED'
   | 'LIGHTNING_MANUAL_RECEIPT_CONFIRMED'
   | 'RECEIVE_MODE_MIGRATED'
+  | 'PRICE_RATE_LOCKED'
   | 'CASH_CONFIRMED'
   | 'CONTRIBUTION_PAID'
   | 'SETTLEMENT_STARTED'
@@ -75,7 +78,19 @@ export interface Game {
   dealer: DealerRule;
   lightningReceiveMode?: LightningReceiveMode;
   organizerLightningDestination?: string;
+  /**
+   * Legacy flat BTC/fiat rate, kept so schema-v1 sessions and backups created
+   * before the price-oracle work remain readable byte-for-byte. New games ALSO
+   * write `lockedRate`; the flat number is mirrored from it for compatibility.
+   */
   lockedBtcFiatRate?: number;
+  /**
+   * Immutable BTC/fiat rate metadata locked at game creation (provider, pair,
+   * bid/ask, midpoint rate, retrieval/lock timestamps, manual flag + note).
+   * Written once by `applyLockedRateToGame`; never mutated afterwards, so a
+   * settings change can never alter an active game.
+   */
+  lockedRate?: LockedRate;
   createdAt: string;
   /**
    * UX23 lobby marker. New games use lobbyVersion=1 and remain in preparation until startedAt is set.

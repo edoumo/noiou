@@ -1,6 +1,7 @@
 import { REGISTERED_LOCALES, isRegisteredLocale, localeDescriptor } from './i18n/locales';
 import { catalogs } from './i18n/catalogs';
 import { t } from './i18n';
+import { DEFAULT_RATE_PROVIDER, PRICE_PROVIDER_IDS, type RateProviderId } from './priceOracle';
 import type { LocaleCode } from './i18n/types';
 import type { SupportedLocale } from './i18n/locales';
 
@@ -18,6 +19,12 @@ export interface UserPreferences {
   vibrateOnPress: boolean;
   clickSound: boolean;
   financialSound: boolean;
+  /**
+   * Preferred BTC/fiat rate source for the NEXT game. Persisted locally and
+   * deliberately independent from any active game: changing it never alters a
+   * rate that was already locked at creation.
+   */
+  rateProvider: RateProviderId;
 }
 
 export const PREFERENCE_STORAGE_KEY = 'noiou.preferences.v1';
@@ -27,7 +34,13 @@ export const DEFAULT_PREFERENCES: UserPreferences = {
   vibrateOnPress: false,
   clickSound: false,
   financialSound: false,
+  rateProvider: DEFAULT_RATE_PROVIDER,
 };
+
+/** True when a stored value is a known rate source. */
+export function isRateProviderId(value: unknown): value is RateProviderId {
+  return typeof value === 'string' && (PRICE_PROVIDER_IDS as readonly string[]).includes(value);
+}
 
 export function isSupportedLocale(value: unknown): value is SupportedLocale {
   return isRegisteredLocale(value);
@@ -44,6 +57,9 @@ export function loadUserPreferences(storage: Pick<Storage, 'getItem'>): UserPref
       vibrateOnPress: typeof parsed.vibrateOnPress === 'boolean' ? parsed.vibrateOnPress : DEFAULT_PREFERENCES.vibrateOnPress,
       clickSound: typeof parsed.clickSound === 'boolean' ? parsed.clickSound : DEFAULT_PREFERENCES.clickSound,
       financialSound: typeof parsed.financialSound === 'boolean' ? parsed.financialSound : DEFAULT_PREFERENCES.financialSound,
+      // Unknown/missing values fall back to the default source (KRAKEN); every
+      // other stored preference is preserved untouched.
+      rateProvider: isRateProviderId(parsed.rateProvider) ? parsed.rateProvider : DEFAULT_PREFERENCES.rateProvider,
     };
   } catch {
     return { ...DEFAULT_PREFERENCES };
@@ -52,7 +68,15 @@ export function loadUserPreferences(storage: Pick<Storage, 'getItem'>): UserPref
 
 export function saveUserPreferences(storage: Pick<Storage, 'setItem'>, preferences: UserPreferences): void {
   storage.setItem(PREFERENCE_STORAGE_KEY, JSON.stringify(preferences));
+  // Notify live components (settings panel ⇄ game creation form) that the
+  // persisted preference changed, so both stay in sync without a reload.
+  if (typeof window !== 'undefined' && storage === window.localStorage) {
+    window.dispatchEvent(new Event(PREFERENCES_SAVED_EVENT));
+  }
 }
+
+/** Fired whenever the user preferences are persisted (see `saveUserPreferences`). */
+export const PREFERENCES_SAVED_EVENT = 'noiou:preferences-saved';
 
 /**
  * Keys whose buttons trigger the enhanced "financial" haptic/sound feedback.

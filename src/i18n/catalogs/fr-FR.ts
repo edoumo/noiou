@@ -217,6 +217,11 @@ export const frFR = {
   'nwc.body.default': 'Connecte un wallet NWC receive-only pour l’automatique, ou choisis « Wallet externe manuel » pour encaisser via ton propre wallet avec confirmation.',
   'nwc.help.summary': 'NWC ou wallet externe : que choisir ?',
   'nwc.help.body': 'NWC automatise la création et la vérification des invoices entrantes sans permission de dépense. Le mode wallet externe s’appuie sur les capacités Lightning disponibles : NOIOU tente une invoice exacte via Lightning Address/LNURL et utilise sinon une BOLT11 ponctuelle du montant exact.',
+  'lightning.mode.nwc.title': 'NWC — encaissement automatique',
+  'lightning.mode.nwc.body': 'NOIOU crée les demandes Lightning et vérifie automatiquement les caves et recaves reçues dans le wallet de l’organisateur. À la fin de la partie, les règlements sortants restent à effectuer par l’organisateur depuis son wallet. NOIOU ne dépense jamais à sa place.',
+  'lightning.mode.external.title': 'Wallet externe — encaissement manuel',
+  'lightning.mode.external.body': 'NOIOU prépare les demandes de paiement, mais l’organisateur vérifie et confirme lui-même les encaissements dans son wallet. À la fin de la partie, les règlements sortants restent également à effectuer manuellement par l’organisateur.',
+  'lightning.outgoing.manual': 'Les règlements sortants de fin de partie sont effectués par l’organisateur depuis son wallet. NOIOU ne dispose d’aucune permission de dépense.',
 
   // ------------------------------------------------------------------ donations
   'donation.title': '❤️ Soutenir NOIOU',
@@ -338,10 +343,10 @@ export const frFR = {
   'join.inviteTerms.chips': ' · {chips} jetons',
 
   // ------------------------------------------------------------------ nwc diagnostics
-  'nwcDiag.summary': '⚙️ NWC réception seule',
+  'nwcDiag.summary': '⚙️ NWC — encaissement automatique',
   'nwcDiag.summaryHint': 'Option · ouvrir uniquement si tu utilises NWC automatique',
   'nwcDiag.kicker': 'Connexion privée · réception Lightning réelle',
-  'nwcDiag.title': 'NWC réception seule',
+  'nwcDiag.title': 'NWC — encaissement automatique',
   'nwcDiag.intro': 'La connexion peut servir aux diagnostics et, seulement après armement explicite, aux caves/recaves (rebuys) réels. NOIOU refuse toute permission de paiement sortant.',
   'nwcDiag.state.locked': 'PARTIE NWC VERROUILLÉE',
   'nwcDiag.state.armed': 'RÉEL ARMÉ',
@@ -524,8 +529,8 @@ export const frFR = {
   'migration.notice': 'L’ancien mode d’encaissement fictif a été retiré de cette version. La réception Lightning de cette partie passe en « Wallet externe manuel ». {details}',
 
   // ------------------------------------------------------------------ receive modes
-  'receiveMode.nwcAuto': 'NWC automatique',
-  'receiveMode.external': 'Wallet externe manuel',
+  'receiveMode.nwcAuto': 'NWC — encaissement automatique',
+  'receiveMode.external': 'Wallet externe — encaissement manuel',
   'receiveMode.mockDev': 'Mock / test (dev)',
   'receiveMode.unavailable': 'Indisponible',
   'nwcState.real': 'NWC RÉEL',
@@ -533,6 +538,36 @@ export const frFR = {
   'nwcState.diagnostic': 'DIAGNOSTIC',
   'nwcState.mock': 'MOCK',
   'nwcState.manual': 'MANUEL',
+
+  // ------------------------------------------------------------------ price oracle / rate
+  'rate.source': 'Source du taux BTC',
+  'rate.provider.kraken': 'Kraken',
+  'rate.provider.coinbase': 'Coinbase',
+  'rate.provider.manual': 'Manuel',
+  'rate.fetch': 'Récupérer le taux',
+  'rate.fetching': 'Récupération du taux…',
+  'rate.quotePair': 'BTC/{quote}',
+  'rate.quoteMidpoint': 'Meilleur achat {bid} · meilleure vente {ask} · milieu {rate}',
+  'rate.ready': 'Taux récupéré · verrouillé à la création de la partie.',
+  'rate.stale': 'Taux trop ancien (plus de 60 s) : récupère-le à nouveau avant de créer la partie.',
+  'rate.offlineTitle': 'Connexion Internet indisponible.',
+  'rate.offlineBody': '{provider} ne peut pas être interrogé.',
+  'rate.errorTitle': 'Impossible de récupérer le taux.',
+  'rate.errorBody': '{provider} n’a pas pu être interrogé. Aucun taux n’a été inventé.',
+  'rate.retry': 'Réessayer',
+  'rate.changeSource': 'Changer de source',
+  'rate.useManual': 'Utiliser un taux manuel',
+  'rate.manualLabel': 'Taux BTC/{currency}',
+  'rate.manualWarning': 'Taux manuel — cette valeur n’est pas vérifiée par une source de marché.',
+  'rate.manualNote': 'Note sur la source du taux',
+  'rate.manualNotePlaceholder': 'Kraken relevé sur téléphone · cours constaté avant perte de réseau · accord des joueurs',
+  'rate.manualConfirm': 'Créer la partie avec ce taux manuel',
+  'rate.locked': 'Taux verrouillé',
+  'rate.lockedLine': '{provider} · {rate} {quote}/BTC · verrouillé {time}',
+  'rate.unverified': 'Non vérifié par une source de marché',
+  'rate.noteLine': 'Note : {note}',
+  'rate.satsNoOracle': 'Partie en sats : aucun taux BTC/fiat n’est nécessaire, aucun appel de marché n’est effectué.',
+  'rate.summaryTitle': 'Taux BTC/{currency}',
 
   // ------------------------------------------------------------------ shared strings
   'common.sats': '{value} sats',

@@ -1,6 +1,7 @@
 import { useEffect, useRef, useState } from 'react';
 import { useI18n } from './i18n/provider';
 import { DEFAULT_PREFERENCES, isFinancialActionLabel, loadUserPreferences, saveUserPreferences, type UserPreferences } from './preferences';
+import { PRICE_PROVIDER_IDS, providerLabelKey } from './priceOracle';
 import { localeDescriptor } from './i18n/locales';
 import './preferences.css';
 
@@ -98,6 +99,19 @@ export default function InteractionPreferences() {
             </select>
           </label>
         </>}
+
+        {/* Preferred BTC/fiat rate source for the NEXT game. Persisted locally;
+            an active game keeps its own locked rate and is never affected. */}
+        <label>{t('rate.source')}
+          <select
+            value={preferences.rateProvider}
+            onChange={(event) => update({ rateProvider: event.target.value as typeof preferences.rateProvider })}
+          >
+            {PRICE_PROVIDER_IDS.map((provider) => (
+              <option key={provider} value={provider}>{t(providerLabelKey(provider))}</option>
+            ))}
+          </select>
+        </label>
 
         <label className="preference-toggle">
           <input

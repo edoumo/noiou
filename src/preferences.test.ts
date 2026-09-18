@@ -22,7 +22,7 @@ describe('user preferences', () => {
 
   it('persists and restores preferences', () => {
     const storage = new MemoryStorage();
-    const next = { locale: 'ja-JP' as const, vibrateOnPress: true, clickSound: true, financialSound: false };
+    const next = { locale: 'ja-JP' as const, vibrateOnPress: true, clickSound: true, financialSound: false, rateProvider: 'KRAKEN' as const };
     saveUserPreferences(storage, next);
     expect(storage.getItem(PREFERENCE_STORAGE_KEY)).toBeTruthy();
     expect(loadUserPreferences(storage)).toEqual(next);

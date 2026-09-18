@@ -42,7 +42,25 @@ import { parseExactBolt11Invoice } from './manualExternalLightning';
 import { MAX_LIVE_GAME_INVOICE_SATS, useNwcSession } from './NwcSessionContext';
 import { allocateOrganizerWalletContribution, retainOrganizerPayout as retainOrganizerPayoutAccounting } from './organizerAccounting';
 import { initialBuyInMethods, paymentChoiceLabel, rebuyActionClass } from './paymentFlow';
+import { DEFAULT_PREFERENCES, loadUserPreferences, PREFERENCES_SAVED_EVENT, saveUserPreferences, type UserPreferences } from './preferences';
+import {
+  effectiveLockedRate,
+  isManualLockedRate,
+  normalizeImportedGame,
+  planRateLock,
+  priceRateLockedPayload,
+  type RatePlan,
+} from './ratePlan';
+import {
+  fetchQuote,
+  providerLabelKey,
+  PRICE_PROVIDER_IDS,
+  type PriceOracleError,
+  type RateProviderId,
+  type RateQuote,
+} from './priceOracle';
 import { planMockRetirement, type MockRetirementPlan } from './receiveModeMigration';
+import { RateSourceControl, LockedRateSummary } from './RateSourceControl';
 import {
   assertReceiveModeAllowed,
   availableReceiveModes,
@@ -104,6 +122,11 @@ function readStoredSession(): SessionSnapshot | null {
 function readThemePreference(): ThemePreference {
   if (typeof window === 'undefined') return 'AUTO';
   return loadThemePreference(window.localStorage);
+}
+
+function readStoredPreferences(): UserPreferences {
+  if (typeof window === 'undefined') return { ...DEFAULT_PREFERENCES };
+  return loadUserPreferences(window.localStorage);
 }
 
 function normalizeDealerMode(mode: DealerMode | undefined): 'NONE' | 'FIXED' | 'PERCENT' {
@@ -199,7 +222,19 @@ export default function App() {
   const [currency, setCurrency] = useState<Currency>(initialSession?.game?.currency ?? 'EUR');
   const [buyIn, setBuyIn] = useState(initialSession?.game?.buyInAmount ?? 10);
   const [chipsPerBuyIn, setChipsPerBuyIn] = useState(() => configuredChipsPerBuyIn(initialSession?.game));
-  const [btcFiatRate, setBtcFiatRate] = useState(initialSession?.game?.lockedBtcFiatRate ?? 100_000);
+  /**
+   * Rate source for the NEXT game. It is only a preference: the rate actually
+   * used by a game is locked in `game.lockedRate` at creation and can never be
+   * changed afterwards (see `ratePlan.ts`).
+   */
+  const [rateProvider, setRateProvider] = useState<RateProviderId>(() => readStoredPreferences().rateProvider);
+  const [rateQuote, setRateQuote] = useState<RateQuote | null>(null);
+  const [rateQuoteError, setRateQuoteError] = useState<PriceOracleError | null>(null);
+  const [rateFetching, setRateFetching] = useState(false);
+  const [manualRate, setManualRate] = useState<number | null>(initialSession?.game?.lockedRate?.manual || initialSession?.game?.currency === 'SATS' ? null : null);
+  const [manualRateNote, setManualRateNote] = useState('');
+  const [manualRateConfirmed, setManualRateConfirmed] = useState(false);
+  const [online, setOnline] = useState(() => (typeof navigator === 'undefined' ? true : navigator.onLine !== false));
   const [lightningReceiveMode, setLightningReceiveMode] = useState<LightningReceiveMode>(() => initialSession?.game?.lightningReceiveMode ?? defaultReceiveMode(nwc.connected));
   const [organizerLightningDestination, setOrganizerLightningDestination] = useState(initialSession?.game?.organizerLightningDestination ?? '');
   const [dealerEnabled, setDealerEnabled] = useState(initialSession?.game?.dealer.enabled ?? false);
@@ -291,7 +326,8 @@ export default function App() {
       setCurrency(restored.game.currency);
       setBuyIn(restored.game.buyInAmount);
       setChipsPerBuyIn(configuredChipsPerBuyIn(restored.game));
-      setBtcFiatRate(restored.game.lockedBtcFiatRate ?? 100_000);
+      // Import never refetches a rate: the imported game keeps the exact
+      // historical rate (lockedRate, or the documented legacy manual value).
       setLightningReceiveMode(restored.game.lightningReceiveMode ?? defaultReceiveMode(nwc.connected));
       setOrganizerLightningDestination(restored.game.organizerLightningDestination ?? '');
       setDealerEnabled(restored.game.dealer.enabled);
@@ -328,6 +364,36 @@ export default function App() {
     saveSession(window.localStorage, snapshot(savedAt));
     setLastSavedAt(savedAt);
   }, [game, players, contributions, invoices, stacks, stacksLocked, settlement, payouts, dealerPaid, dealerTips, ledger, projectDonations]);
+
+  /**
+   * Browser connectivity hint. `navigator.onLine === false` is only an UX
+   * accelerant (immediate, clear help instead of a network timeout); it is
+   * NEVER treated as proof of (dis)connectivity — the fetch itself remains the
+   * authority for every automatic rate source.
+   */
+  useEffect(() => {
+    if (typeof window === 'undefined') return;
+    const sync = () => setOnline(navigator.onLine !== false);
+    sync();
+    window.addEventListener('online', sync);
+    window.addEventListener('offline', sync);
+    return () => {
+      window.removeEventListener('online', sync);
+      window.removeEventListener('offline', sync);
+    };
+  }, []);
+
+  /**
+   * Keep the preferred rate source in sync with the settings panel. The
+   * preference applies to the NEXT game only: an active game keeps the rate it
+   * locked at creation (see `lockedRate`), so no re-render here can alter it.
+   */
+  useEffect(() => {
+    if (typeof window === 'undefined') return;
+    const sync = () => setRateProvider(readStoredPreferences().rateProvider);
+    window.addEventListener(PREFERENCES_SAVED_EVENT, sync);
+    return () => window.removeEventListener(PREFERENCES_SAVED_EVENT, sync);
+  }, []);
 
   /**
    * UX27: record the one-time mock-retirement migration in the tamper-evident ledger so the
@@ -393,10 +459,47 @@ export default function App() {
     scrollToTarget(nextPlayer ? `player-${nextPlayer.id}` : 'workflow-guide');
   }
 
+  /**
+   * Resolve the locked BTC/fiat rate for the game being created.
+   *
+   * Doctrine: an automatic source must produce a FRESH quote (<= 60 s) — if the
+   * quote is missing or stale the creation blocks and asks for an explicit
+   * refresh; NOIOU never invents a price and never switches to manual on its
+   * own. MANUAL needs no network at all: a fully offline EUR/USD cash game is a
+   * supported product mode, not a developer escape hatch.
+   */
+  async function resolveRateForCreation(): Promise<RatePlan> {
+    const plan = planRateLock({
+      currency,
+      provider: rateProvider,
+      manualRate,
+      manualNote: manualRateNote,
+      manualConfirmed: manualRateConfirmed,
+      quote: rateQuote,
+      nowMs: Date.now(),
+    });
+    if (plan.kind === 'BLOCKED') {
+      if (plan.code === 'QUOTE_STALE') throw new Error(t('rate.stale'));
+      if (plan.code === 'MANUAL_RATE_MISSING' || plan.code === 'MANUAL_RATE_INVALID') throw new Error(t('error.positiveRateRequired'));
+      throw new Error(t('rate.manualConfirm'));
+    }
+    if (plan.kind === 'NEEDS_QUOTE') {
+      // A fetch is attempted at most once per click: no automatic retry loop.
+      const quote = await fetchQuote({
+        provider: rateProvider,
+        quote: currency === 'USD' ? 'USD' : 'EUR',
+        isOnline: () => online,
+      });
+      setRateQuote(quote);
+      setRateQuoteError(null);
+      return planRateLock({ currency, provider: rateProvider, manualRate, manualNote: manualRateNote, manualConfirmed: manualRateConfirmed, quote, nowMs: Date.now() });
+    }
+    return plan;
+  }
+
   async function startGame() {
     if (buyIn <= 0) throw new Error(t('error.buyInPositive'));
     if (!Number.isInteger(chipsPerBuyIn) || chipsPerBuyIn <= 0) throw new Error(t('error.chipsPositiveInteger'));
-    if (currency !== 'SATS' && btcFiatRate <= 0) throw new Error(t('error.positiveRateRequired'));
     assertReceiveModeAllowed(lightningReceiveMode, RUNTIME.allowMockPayments);
     if (lightningReceiveMode === 'NWC_RECEIVE_ONLY' && currency !== 'SATS') throw new Error(t('error.nwcSatsOnly'));
     if (lightningReceiveMode === 'NWC_RECEIVE_ONLY' && !nwc.connected) throw new Error(t('error.nwcNotConnected'));
@@ -404,6 +507,10 @@ export default function App() {
     if (dealerEnabled && dealerMode === 'PERCENT' && dealerValue > 100) throw new Error(t('error.dealerPercentMax'));
     if (dealerEnabled && dealerPayment === 'LIGHTNING' && !dealerLightningAddress.trim()) throw new Error(t('error.dealerDestinationRequired'));
     if (startupDonationSats < 0 || !Number.isInteger(startupDonationSats)) throw new Error(t('error.startDonationInteger'));
+
+    const ratePlanResolved = await resolveRateForCreation();
+    if (ratePlanResolved.kind === 'BLOCKED') throw new Error(t('error.positiveRateRequired'));
+    const lockedRate = ratePlanResolved.kind === 'MANUAL' || ratePlanResolved.kind === 'AUTO' ? ratePlanResolved.locked : undefined;
 
     const normalizedDealerDestination = dealerEnabled && dealerPayment === 'LIGHTNING'
       ? normalizeReusableLightningDestination(dealerLightningAddress)
@@ -431,7 +538,9 @@ export default function App() {
       } : { enabled: false, mode: 'NONE' },
       lightningReceiveMode,
       organizerLightningDestination: normalizedOrganizerDestination,
-      lockedBtcFiatRate: currency === 'SATS' ? undefined : btcFiatRate,
+      // The lock happens exactly here; nothing below this line ever changes it.
+      lockedBtcFiatRate: lockedRate?.rate,
+      lockedRate,
       createdAt,
       lobbyVersion: 1,
     };
@@ -442,11 +551,17 @@ export default function App() {
       chipsPerBuyIn: created.chipsPerBuyIn,
       chipValueLegacy: created.chipValue,
       lockedBtcFiatRate: created.lockedBtcFiatRate ?? null,
+      rateProvider: lockedRate?.provider ?? null,
       dealer: created.dealer,
       lightningReceiveMode: created.lightningReceiveMode,
       organizerDestinationConfigured: Boolean(created.organizerLightningDestination),
       lobbyVersion: created.lobbyVersion,
     });
+    if (lockedRate) {
+      // Auditable rate event: the provider, pair, quote values and timestamps
+      // are chained into the ledger; a manual rate is immediately identifiable.
+      await record(created.id, 'PRICE_RATE_LOCKED', priceRateLockedPayload(lockedRate));
+    }
     if (startupDonationSats > 0) await recordDonation(created.id, startupDonationSats, 'Organisateur');
     scrollToTarget('add-player');
   }
@@ -941,6 +1056,13 @@ export default function App() {
       restored = { ...restored, game: plan.game, contributions: plan.contributions };
       setMigrationNotice(t('backup.importedMigrated'));
     }
+    // Legacy backups only carried `lockedBtcFiatRate` (no provider): the value
+    // is restored as an explicitly documented legacy manual rate. Import NEVER
+    // refetches a rate from a provider — history is restored, not refreshed.
+    const normalizedGame = normalizeImportedGame(restored.game);
+    if (normalizedGame && normalizedGame !== restored.game) {
+      restored = { ...restored, game: normalizedGame };
+    }
     applySnapshot(restored);
     if (typeof window !== 'undefined') saveSession(window.localStorage, restored);
     setBackupStatus(t('backup.imported'));
@@ -1055,15 +1177,26 @@ export default function App() {
               <input type="number" min="1" step="1" value={chipsPerBuyIn} onChange={(event) => setChipsPerBuyIn(Number(event.target.value))} />
             </label>
             <p className="muted chip-rule-note">{t('game.chipRuleNote')}</p>
-            {currency !== 'SATS' && <label>{t('game.btcRate', { currency })}
-              <input type="number" min="1" value={btcFiatRate} onChange={(event) => setBtcFiatRate(Number(event.target.value))} />
-            </label>}
+            <RateSourceControl
+              currency={currency}
+              online={online}
+              state={{ provider: rateProvider, quote: rateQuote, quoteError: rateQuoteError, fetching: rateFetching, manualRate, manualNote: manualRateNote, manualConfirmed: manualRateConfirmed }}
+              onChange={(next) => {
+                if (next.provider !== undefined) setRateProvider(next.provider);
+                if (next.quote !== undefined) setRateQuote(next.quote);
+                if (next.quoteError !== undefined) setRateQuoteError(next.quoteError);
+                if (next.fetching !== undefined) setRateFetching(next.fetching);
+                if (next.manualRate !== undefined) setManualRate(next.manualRate);
+                if (next.manualNote !== undefined) setManualRateNote(next.manualNote);
+                if (next.manualConfirmed !== undefined) setManualRateConfirmed(next.manualConfirmed);
+              }}
+            />
             <label>{t('game.receiveModeLabel')}
               <select value={lightningReceiveMode} onChange={(event) => { receiveModeTouched.current = true; setLightningReceiveMode(event.target.value as LightningReceiveMode); }}>
                 {availableReceiveModes(RUNTIME.allowMockPayments).map((mode) => <option key={mode} value={mode}>{receiveModeLabel(mode, RUNTIME.allowMockPayments)}</option>)}
               </select>
             </label>
-            {lightningReceiveMode === 'EXTERNAL_WALLET_MANUAL' && <div className="wallet-association">
+            {lightningReceiveMode === 'EXTERNAL_WALLET_MANUAL' && <div className="wallet-association" data-floating-safe-zone="lightning-organizer">
               <strong>{t('game.walletLink.title')}</strong>
               <small>{t('game.walletLink.help')}</small>
               <LightningDestinationField
@@ -1121,6 +1254,9 @@ export default function App() {
           <div><strong>{fmt(paidTotal, game.currency)}</strong><small>{t('game.statusCard.collected')}</small></div>
           <div><strong>{game.chipsPerBuyIn ?? configuredChipsPerBuyIn(game)}</strong><small>{t('game.statusCard.chipsPerBuyIn')}</small></div>
         </section>
+        {/* Locked rate of the ACTIVE game — read-only, impossible to edit, flagged
+            « non vérifié » when a manual rate was chosen. */}
+        {game.currency !== 'SATS' && game.lockedRate && <LockedRateSummary locked={effectiveLockedRate(game)} />}
         <WorkflowGuide game={game} players={players} contributions={contributions} settlement={settlement} payouts={payouts} dealerPaid={dealerPaid} onStartGame={() => void execute(beginPlay)} />
       </>}
 
@@ -1227,14 +1363,14 @@ export default function App() {
             {!stacksLocked && game.status === 'SETTLING' && <button className="primary wide" onClick={() => void execute(validateStacks)}>{t('stack.validate')}</button>}
           </section>
 
-          {settlement && <section id="settlement-control" className={`card ${settlement.balanced ? 'ok' : 'blocked'}`}>
+          {settlement && <section id="settlement-control" className={`card ${settlement.balanced ? 'ok' : 'blocked'}`} data-floating-safe-zone="settlement-control">
             <div className="section-title"><h2>{t('settlement.control.title')}</h2><strong>{settlement.balanced ? t('settlement.control.balanced') : t('settlement.control.blocked')}</strong></div>
             <p>{t('settlement.control.counts', { issued: settlement.issuedChips, counted: settlement.countedChips })}</p>
             {!settlement.balanced && <p>{t('settlement.control.difference', { difference: `${settlement.chipDifference > 0 ? '+' : ''}${settlement.chipDifference}` })}</p>}
             {settlement.balanced && <p>{t('settlement.control.validated', { players: fmt(settlement.distributableAmount, game.currency), dealer: fmt(settlement.dealerCompensation, game.currency) })}</p>}
           </section>}
 
-          {settlement?.balanced && <section className="card settlement-card" id="settlements">
+          {settlement?.balanced && <section className="card settlement-card" id="settlements" data-floating-safe-zone="settlement-controls">
             <div className="section-title"><h2>{t('settlement.title')}</h2><span>{t('settlement.subtitle')}</span></div>
             <p className="muted settlement-help">{t('settlement.help')}</p>
             <div className="payouts">{payouts.filter((payout) => payout.amount > 0).map((payout) => {
@@ -1324,13 +1460,13 @@ export default function App() {
         </section>
       )}
 
-      <section className="card ledger-card">
+      <section className="card ledger-card" data-floating-safe-zone="ledger">
         <div className="section-title"><h2>{t('ledger.title')}</h2><strong>{ledgerVerified ? t('ledger.valid') : t('ledger.tampered')}</strong></div>
         <p>{t('ledger.count', { count: ledger.length })}</p>
         {ledger.slice(-5).reverse().map((event) => <div className="ledger-event" key={event.id}><span>#{event.sequence} {event.type}</span><code>{event.hash.slice(0, 12)}…</code></div>)}
       </section>
 
-      <details className="card backup-tools backup-details">
+      <details className="card backup-tools backup-details" data-floating-safe-zone="backup">
         <summary>
           <span><strong>{t('backup.title')}</strong><small>{t('backup.subtitle')}</small></span>
         </summary>
@@ -1348,7 +1484,7 @@ export default function App() {
         </div>
       </details>
 
-      <section className={`card nwc-preview ${nwcMode === 'RECONNECT_REQUIRED' ? 'nwc-reconnect' : ''}`}>
+      <section className={`card nwc-preview ${nwcMode === 'RECONNECT_REQUIRED' ? 'nwc-reconnect' : ''}`} data-floating-safe-zone="nwc">
         <div><h2>{t('nwc.title')}</h2><p>{game?.lightningReceiveMode === 'EXTERNAL_WALLET_MANUAL'
           ? t('nwc.body.external')
           : nwcMode === 'LIVE_ARMED'
@@ -1361,9 +1497,13 @@ export default function App() {
                   ? t('nwc.body.mock')
                   : t('nwc.body.default')}
           </p>
+          {/* Mode doctrine: NWC automates INCOMING collections only; every
+              outgoing settlement stays manual in the organizer's wallet. */}
+          <p className="nwc-boundary"><strong>{game?.lightningReceiveMode === 'EXTERNAL_WALLET_MANUAL' ? t('lightning.mode.external.title') : t('lightning.mode.nwc.title')}</strong>{' — '}{game?.lightningReceiveMode === 'EXTERNAL_WALLET_MANUAL' ? t('lightning.mode.external.body') : t('lightning.mode.nwc.body')}</p>
           <details className="wallet-help">
             <summary>{t('nwc.help.summary')}</summary>
             <p>{t('nwc.help.body')}</p>
+            <p>{t('lightning.outgoing.manual')}</p>
           </details>
         </div>
         <span className={`state ${game?.lightningReceiveMode === 'EXTERNAL_WALLET_MANUAL' || nwcMode === 'LIVE_ARMED' ? 'paid' : 'pending'}`}>{game?.lightningReceiveMode === 'EXTERNAL_WALLET_MANUAL' ? t('nwc.state.external') : nwcRuntimeStateLabel(nwcMode, RUNTIME.allowMockPayments)}</span>

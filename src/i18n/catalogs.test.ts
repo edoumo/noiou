@@ -48,6 +48,11 @@ const NEUTRAL_TOKENS = new Set([
   'non-custodial', 'by', 'design', 'chips', 'jetons', 'photos', 'permissions', 'wallet',
   'cave', 'recave', 'organisateur', 'paiement', 'tip', 'montant', 'mode', 'especes',
   'reglages', 'langue', 'ou', 'or', 'lno1',
+  // Market-data proper nouns: a brand name is never translated, so a locale
+  // legitimately ships the exact same string as the French reference.
+  'kraken', 'coinbase',
+  // Technical notations (pair code) that stay literal in every language.
+  'btc',
 ]);
 
 /**

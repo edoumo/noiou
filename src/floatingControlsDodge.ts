@@ -3,16 +3,36 @@
  *
  * The bottom-left floating shortcuts (`party-join-launcher`, `new-game-fab`) are
  * `position: fixed`, so mid-scroll they can partially cover an in-flow primary
- * action such as « Continuer vers les joueurs ». Hiding them permanently would
- * degrade the shortcuts, so instead they step aside ONLY while a primary action
- * actually intersects their band, and come back as soon as it does not.
+ * action — or, worse, an important reading/control zone such as the Lightning /
+ * NWC block, the settlement controls, the audit log or the backup section.
+ * Hiding them permanently would degrade the shortcuts, so instead they step
+ * aside ONLY while they would actually cover something that matters, and come
+ * back as soon as the overlap is gone.
  *
- * The check is cheap (a handful of buttons, rAF-throttled) and purely visual:
+ * Protected targets, in decreasing priority:
+ *  1. explicit safe zones — any element carrying the `data-floating-safe-zone`
+ *     attribute (organizer Lightning / NWC block, settlement explanations and
+ *     controls, audit log, backup & transfer, locked-rate summary);
+ *  2. primary actions (`.primary`, `.wide`, `.wide-mobile`) travelling through
+ *     the floating band — the historical behaviour;
+ *  3. any other interactive control (button, link, field, summary) that the
+ *     floating shortcut would cover.
+ *
+ * The check is cheap (a handful of elements, rAF-throttled) and purely visual:
  * no game state, ledger or network involvement.
  */
 
 /** Buttons that must never be covered by the floating shortcuts. */
 const PRIMARY_ACTION_SELECTOR = 'button.primary.wide, button.wide-mobile, button.primary';
+
+/**
+ * Generic protection hook: mark any block whose text or controls must never be
+ * hidden behind the floating shortcuts.
+ */
+export const SAFE_ZONE_SELECTOR = '[data-floating-safe-zone]';
+
+/** Any interactive control that must never be covered either. */
+const INTERACTIVE_SELECTOR = 'button, a[href], input, select, textarea, summary, [role="button"]';
 
 /** Elements that step aside. */
 const FLOATING_SELECTOR = '.party-join-launcher, .new-game-fab';
@@ -32,40 +52,77 @@ function rectsOverlap(a: DOMRect, b: DOMRect): boolean {
   return a.left < b.right && a.right > b.left && a.top < b.bottom && a.bottom > b.top;
 }
 
+function isMeasurable(box: DOMRect): boolean {
+  return box.height > 0 && box.width > 0;
+}
+
+function anyOverlap(box: DOMRect, others: readonly DOMRect[]): boolean {
+  return others.some((other) => rectsOverlap(box, other));
+}
+
 /**
- * Compute whether any primary action intersects the floating band.
+ * Floating boxes currently rendered (the shortcut hitboxes).
  * Exported for unit testing.
  */
-export function primaryActionInBand(doc: Document, win: Window): boolean {
+export function floatingBoxes(doc: Document): DOMRect[] {
+  return Array.from(doc.querySelectorAll<HTMLElement>(FLOATING_SELECTOR))
+    .map((element) => element.getBoundingClientRect())
+    .filter(isMeasurable);
+}
+
+/**
+ * Compute whether any protected target intersects the floating shortcuts.
+ *
+ * Exported for unit testing.
+ */
+export function protectedContentInBand(doc: Document, win: Window): boolean {
+  const floating = floatingBoxes(doc);
+  if (floating.length === 0) return false;
+
+  // The floating controls themselves are interactive: they must never be
+  // treated as their own obstacle (that would hide them permanently).
+  const floatingRoots = Array.from(doc.querySelectorAll<HTMLElement>(FLOATING_SELECTOR));
+  const isFloating = (element: Element): boolean => floatingRoots.some((root) => root === element || root.contains(element));
+
+  // 1. Explicit safe zones: anything marked is protected whatever its size.
+  for (const zone of Array.from(doc.querySelectorAll<HTMLElement>(SAFE_ZONE_SELECTOR))) {
+    if (isFloating(zone)) continue;
+    const box = zone.getBoundingClientRect();
+    if (!isMeasurable(box)) continue;
+    if (anyOverlap(box, floating)) return true;
+  }
+
   const viewportHeight = win.innerHeight || doc.documentElement.clientHeight;
   const bandTop = viewportHeight - BAND_HEIGHT;
-  const band: DOMRect = {
-    x: 0,
-    y: bandTop,
-    width: win.innerWidth || doc.documentElement.clientWidth,
-    height: BAND_HEIGHT,
-    top: bandTop,
-    bottom: viewportHeight,
-    left: 0,
-    right: win.innerWidth || doc.documentElement.clientWidth,
-    toJSON: () => ({}),
-  } as DOMRect;
 
-  const floating = Array.from(doc.querySelectorAll<HTMLElement>(FLOATING_SELECTOR));
-  if (floating.length === 0) return false;
-  const floatingBoxes = floating.map((element) => element.getBoundingClientRect()).filter((box) => box.height > 0);
-  if (floatingBoxes.length === 0) return false;
-
-  const actions = Array.from(doc.querySelectorAll<HTMLElement>(PRIMARY_ACTION_SELECTOR));
-  for (const action of actions) {
+  // 2. Historical behaviour: a primary action crossing the floating band and
+  //    intersecting a shortcut box.
+  for (const action of Array.from(doc.querySelectorAll<HTMLElement>(PRIMARY_ACTION_SELECTOR))) {
     const box = action.getBoundingClientRect();
-    if (box.height === 0 || box.width === 0) continue;
+    if (!isMeasurable(box)) continue;
     if (box.bottom < bandTop || box.top > viewportHeight) continue;
-    if (!rectsOverlap(box, band)) continue;
-    // Only dodge for buttons that are actually covered by a floating shortcut.
-    if (floatingBoxes.some((floatingBox) => rectsOverlap(box, floatingBox))) return true;
+    if (anyOverlap(box, floating)) return true;
   }
+
+  // 3. Any other interactive control the shortcut would cover: an in-flow
+  //    button/field/row must never be clickable-blocked by a fixed shortcut.
+  for (const control of Array.from(doc.querySelectorAll<HTMLElement>(INTERACTIVE_SELECTOR))) {
+    if (isFloating(control)) continue;
+    const box = control.getBoundingClientRect();
+    if (!isMeasurable(box)) continue;
+    if (anyOverlap(box, floating)) return true;
+  }
+
   return false;
+}
+
+/**
+ * Backwards-compatible alias used by the historical unit tests and callers.
+ * @deprecated prefer `protectedContentInBand`, which also covers safe zones and
+ * interactive controls. Kept so existing imports keep working.
+ */
+export function primaryActionInBand(doc: Document, win: Window): boolean {
+  return protectedContentInBand(doc, win);
 }
 
 /**
@@ -80,7 +137,7 @@ export function installFloatingControlsDodge({ doc, win }: DodgeDeps): () => voi
 
   function apply() {
     frame = 0;
-    const next = primaryActionInBand(doc, win);
+    const next = protectedContentInBand(doc, win);
     if (next === current) return;
     current = next;
     doc.documentElement.classList.toggle(DODGE_CLASS, next);
