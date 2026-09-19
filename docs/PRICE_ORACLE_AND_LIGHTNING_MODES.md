@@ -95,6 +95,9 @@ reloads, navigation and backup round-trips.
 | Zone | Surface |
 |---|---|
 | `rate` | rate source block (creation) + SATS note |
+| `currency-default` | locale default-currency hint |
+| `currency-reset` | “back to the language default” button |
+| `cash-only` | cash-only declaration switch |
 | `locked-rate` | locked-rate read-only summary |
 | `lightning-organizer` | organizer Lightning destination block |
 | `collections` | caves / rebuys and their explanations |
@@ -113,6 +116,21 @@ protected zone, and return as soon as the overlap is gone.
 A fixed control is deliberately never treated as “its own obstacle”: on a long
 page that would hide it permanently and make it unreachable — the opposite of
 the goal. Every mandated zone is enumerated instead.
+
+### Two traps found while validating the currency block
+
+1. **The first screen never re-evaluated.** The install ran a single pass, and
+   neither a scroll nor a DOM mutation follows the initial render, so the
+   collapsed pill kept covering the cash-only switch at scroll 0 until the user
+   scrolled. A second rAF pass plus a 400 ms settle pass close the gap.
+2. **Collapsing the settings panel is an ATTRIBUTE change.** The dodge observed
+   `childList` only, so closing the panel (which puts the pill back over the
+   page) left the shortcuts in the wrong state until the next scroll. The
+   observer now also watches `open`.
+
+Both are covered by measurement: 7 locales × 8 scroll positions × the currency
+selector / hint / reset / cash-only switch / rate note → **0 blocked target**.
+
 
 ## 7. Tests
 
