@@ -18,6 +18,7 @@ import QrCameraScanner from './QrCameraScanner';
 import { decodeQrImageFile } from './qrImageImport';
 import { readPageOrigin, rememberPendingJoinLanding } from './joinLanding';
 import { loadSession, saveSession } from './session';
+import { sendAppTelemetry } from './telemetry';
 import './partyJoin.css';
 
 type Mode = 'CLOSED' | 'ORGANIZER' | 'SCAN_INVITE' | 'SCAN_RESPONSE' | 'PARTICIPANT' | 'RESPONSE';
@@ -42,6 +43,7 @@ export default function PartyJoinControl() {
     if (!encoded) return;
     try {
       const parsed = parsePartyInvite(encoded);
+      sendAppTelemetry('join_qr_used');
       setInvite(parsed);
       setMode('PARTICIPANT');
       window.history.replaceState({}, '', window.location.pathname + window.location.hash);
@@ -85,6 +87,7 @@ export default function PartyJoinControl() {
     try {
       setError('');
       const parsed = parsePartyInvite(raw);
+      sendAppTelemetry('join_qr_used');
       setInvite(parsed);
       setNickname('');
       setPreferredPayment('CASH');
