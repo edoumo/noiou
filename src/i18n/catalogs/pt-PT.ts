@@ -8,7 +8,6 @@ import type { Catalog } from '../types';
 import type { TranslationKey } from './fr-FR';
 
 export const pt_PT: Record<TranslationKey, string> = {
-  'app.eyebrow': 'Alfa privada · mesa física',
   'app.nonCustodial': 'Não custodial por design',
   'app.steps.aria': 'Etapas do jogo',
   'app.steps.collect': 'Cobrar',
