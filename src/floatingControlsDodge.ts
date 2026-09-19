@@ -178,7 +178,14 @@ export function installFloatingControlsDodge({ doc, win }: DodgeDeps): () => voi
     frame = win.requestAnimationFrame(apply);
   }
 
+  // First pass on the current layout, then once more shortly after: the initial
+  // render, late-arriving state and web-font metrics can all move the protected
+  // content AFTER this install runs, and without a scroll or a mutation the
+  // dodge would never re-evaluate on the first screen (measured: the collapsed
+  // settings pill kept covering the cash-only switch at scroll 0).
   apply();
+  schedule();
+  const settleTimer = typeof win.setTimeout === 'function' ? win.setTimeout(schedule, 400) : undefined;
 
   win.addEventListener('scroll', schedule, { passive: true });
   win.addEventListener('resize', schedule);
@@ -188,6 +195,7 @@ export function installFloatingControlsDodge({ doc, win }: DodgeDeps): () => voi
 
   return () => {
     if (frame) win.cancelAnimationFrame(frame);
+    if (settleTimer !== undefined && typeof win.clearTimeout === 'function') win.clearTimeout(settleTimer);
     win.removeEventListener('scroll', schedule);
     win.removeEventListener('resize', schedule);
     observer?.disconnect();
