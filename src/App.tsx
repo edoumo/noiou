@@ -1226,7 +1226,6 @@ export default function App() {
     <main className="shell">
       <header>
         <div>
-          <p className="eyebrow">{t('app.eyebrow')}</p>
           <h1>NOIOU</h1>
           <p className="tagline">{t('app.tagline')}</p>
         </div>
