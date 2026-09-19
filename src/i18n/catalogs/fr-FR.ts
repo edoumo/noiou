@@ -15,7 +15,6 @@ import type { Catalog } from '../types';
 
 export const frFR = {
   // ------------------------------------------------------------------ app shell
-  'app.eyebrow': 'Private alpha · physical table',
   'app.tagline': 'La partie reste physique. NOIOU s’occupe seulement de la caisse et du règlement.',
   'app.nonCustodial': 'Non-custodial by design',
   'app.theme': 'Thème',
