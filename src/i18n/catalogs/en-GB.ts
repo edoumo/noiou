@@ -8,6 +8,7 @@ import type { Catalog } from '../types';
 import type { TranslationKey } from './fr-FR';
 
 export const en_GB: Record<TranslationKey, string> = {
+  'app.eyebrow': 'Physical poker · digital buy-ins & settlement',
   'app.nonCustodial': 'Non-custodial by design',
   'app.steps.aria': 'Game steps',
   'app.steps.collect': 'Collect',
