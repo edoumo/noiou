@@ -8,6 +8,7 @@ import type { Catalog } from '../types';
 import type { TranslationKey } from './fr-FR';
 
 export const hr_HR: Record<TranslationKey, string> = {
+  'app.eyebrow': 'Poker uživo · digitalni buy-inovi i obračun',
   'app.nonCustodial': 'Bez skrbništva nad sredstvima, po dizajnu',
   'app.steps.aria': 'Koraci igre',
   'app.steps.collect': 'Naplati',
