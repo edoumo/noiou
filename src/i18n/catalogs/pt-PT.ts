@@ -8,6 +8,7 @@ import type { Catalog } from '../types';
 import type { TranslationKey } from './fr-FR';
 
 export const pt_PT: Record<TranslationKey, string> = {
+  'app.eyebrow': 'Póquer presencial · buy-ins e acertos digitais',
   'app.nonCustodial': 'Não custodial por design',
   'app.steps.aria': 'Etapas do jogo',
   'app.steps.collect': 'Cobrar',
