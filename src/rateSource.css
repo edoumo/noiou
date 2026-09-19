@@ -101,3 +101,28 @@
 :root[data-theme="dark"] .locked-rate-manual{background:#422006;border-color:#d97706;color:#fde68a}
 :root[data-theme="dark"] .locked-rate-manual strong,
 :root[data-theme="dark"] .locked-rate-manual small{color:#fde68a}
+
+
+/* Brand-accent integration: the rate block stays neutral; actionable market controls inherit NOIOU gold. */
+.rate-source:focus-within{
+  border-color:var(--noiou-accent-line);
+  box-shadow:0 0 0 3px var(--noiou-accent-ring);
+}
+.rate-quote>button{
+  border-color:var(--noiou-accent-line);
+  color:#6f4500;
+  background:var(--noiou-accent-soft);
+}
+.rate-quote>button:hover:not(:disabled){
+  border-color:var(--noiou-accent);
+  background:#fff0cf;
+}
+:root[data-theme="dark"] .rate-quote>button{
+  border-color:var(--noiou-accent-line);
+  color:#ffd58a;
+  background:#2d210e;
+}
+:root[data-theme="dark"] .rate-quote>button:hover:not(:disabled){
+  background:#3a2a10;
+  border-color:var(--noiou-accent);
+}
