@@ -97,6 +97,7 @@ import {
   type ThemePreference,
 } from './theme';
 import WorkflowGuide from './WorkflowGuide';
+import { sendAppTelemetry } from './telemetry';
 import './styles.css';
 import './ux19.css';
 import './ux23.css';
@@ -224,6 +225,12 @@ function hasPaidBuyInIn(contributions: readonly Contribution[], playerId: string
 export default function App() {
   const { t, locale, formatAmount: fmt } = useI18n();
   const nwc = useNwcSession();
+  const appOpenTelemetrySent = useRef(false);
+  useEffect(() => {
+    if (appOpenTelemetrySent.current) return;
+    sendAppTelemetry('app_open', locale);
+    appOpenTelemetrySent.current = true;
+  }, [locale]);
   const [boot] = useState<BootSession>(() => readBootSession());
   const initialSession = boot.session;
   const [migrationNotice, setMigrationNotice] = useState(boot.migrationNotice);
@@ -652,6 +659,9 @@ export default function App() {
       organizerDestinationConfigured: Boolean(created.organizerLightningDestination),
       lobbyVersion: created.lobbyVersion,
     });
+    sendAppTelemetry('game_created', locale);
+    if (created.lightningReceiveMode === 'NWC_RECEIVE_ONLY') sendAppTelemetry('receive_mode_nwc', locale);
+    if (created.lightningReceiveMode === 'EXTERNAL_WALLET_MANUAL') sendAppTelemetry('receive_mode_manual', locale);
     if (lockedRate) {
       // Auditable rate event: the provider, pair, quote values and timestamps
       // are chained into the ledger; a manual rate is immediately identifiable.
@@ -715,6 +725,7 @@ export default function App() {
       paidInitialCaves: players.filter((player) => hasPaidBuyInIn(contributions, player.id)).length,
       minimumPlayers: MIN_POKER_PLAYERS,
     });
+    sendAppTelemetry('game_started', locale);
     scrollToTarget('collections');
   }
 
@@ -1089,6 +1100,7 @@ export default function App() {
     if (!closure.allowed) throw new Error(closure.reasons.join(' · '));
     setGame({ ...game, status: 'CLOSED' });
     await record(game.id, 'GAME_CLOSED', { payouts: payouts.filter((payout) => payout.amount > 0).length, ledgerEvents: ledgerRef.current.length + 1 });
+    sendAppTelemetry('game_closed', locale);
     scrollToTarget('workflow-guide');
   }
 
