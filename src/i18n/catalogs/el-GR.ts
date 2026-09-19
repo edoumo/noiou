@@ -8,6 +8,7 @@ import type { Catalog } from '../types';
 import type { TranslationKey } from './fr-FR';
 
 export const el_GR: Record<TranslationKey, string> = {
+  'app.eyebrow': 'Πόκερ στο τραπέζι · ψηφιακά buy-ins και διακανονισμός',
   'app.nonCustodial': 'Μη θεματοφυλακτικό εκ σχεδιασμού',
   'app.steps.aria': 'Στάδια παιχνιδιού',
   'app.steps.collect': 'Είσπραξη',
