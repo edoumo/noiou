@@ -8,6 +8,7 @@ import type { Catalog } from '../types';
 import type { TranslationKey } from './fr-FR';
 
 export const hu_HU: Record<TranslationKey, string> = {
+  'app.eyebrow': 'Élő póker · digitális beülők és elszámolás',
   'app.nonCustodial': 'Letétkezelés nélkül, tervezésből fakadóan',
   'app.steps.aria': 'A játék lépései',
   'app.steps.collect': 'Beszámítás',
