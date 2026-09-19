@@ -5,8 +5,8 @@
   "start_url": "/",
   "scope": "/",
   "display": "standalone",
-  "background_color": "#111827",
-  "theme_color": "#111827",
+  "background_color": "#0D0E10",
+  "theme_color": "#0D0E10",
   "description": "Open-source settlement companion for physical poker games.",
   "icons": [
     {
