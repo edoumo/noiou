@@ -91,7 +91,7 @@ export function sendAppTelemetry(event: AppTelemetryEvent, locale?: string): voi
       keepalive: true,
       headers: { 'Content-Type': 'text/plain;charset=UTF-8' },
       body,
-    });
+    }).catch(() => undefined);
   } catch {
     // Telemetry must never alter the product flow.
   }
