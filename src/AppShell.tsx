@@ -10,6 +10,7 @@ import NwcReceiveDiagnostic from './NwcReceiveDiagnostic';
 import { NwcSessionProvider } from './NwcSessionContext';
 import PartyJoinControl from './PartyJoinControl';
 import SessionResetControl from './SessionResetControl';
+import { sendAppTelemetry } from './telemetry';
 import './uxFixes.css';
 import './ux20.css';
 import './ux22.css';
@@ -21,6 +22,16 @@ export default function AppShell() {
   // Bottom-left floating shortcuts step aside while they would cover a primary
   // in-flow action (e.g. « Continuer vers les joueurs » mid-scroll).
   useEffect(() => installFloatingControlsDodge({ doc: document, win: window }), []);
+
+  useEffect(() => {
+    const report = () => sendAppTelemetry('technical_error');
+    window.addEventListener('error', report);
+    window.addEventListener('unhandledrejection', report);
+    return () => {
+      window.removeEventListener('error', report);
+      window.removeEventListener('unhandledrejection', report);
+    };
+  }, []);
 
   return (
     <I18nProvider>
