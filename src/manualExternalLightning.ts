@@ -1,3 +1,4 @@
+import { t } from './i18n';
 import { parseLightningDestination } from './lightningDestination';
 
 export const MANUAL_EXTERNAL_REFERENCE_PREFIX = 'manual-lightning:';
@@ -66,30 +67,30 @@ export function parseBolt11AmountFromHrp(hrp: string): Bolt11Amount | null {
   else if (unit === 'u') msats = amount * 100_000n;
   else if (unit === 'n') msats = amount * 100n;
   else {
-    if (amount % 10n !== 0n) throw new Error('Invoice BOLT11 avec montant inférieur au millisatoshi non supportée');
+    if (amount % 10n !== 0n) throw new Error(t('error.bolt11SubMsat'));
     msats = amount / 10n;
   }
 
   const sats = msats % 1000n === 0n ? Number(msats / 1000n) : null;
-  if (sats !== null && !Number.isSafeInteger(sats)) throw new Error('Montant BOLT11 trop grand');
+  if (sats !== null && !Number.isSafeInteger(sats)) throw new Error(t('error.bolt11TooLarge'));
   return { msats, sats };
 }
 
 export function parseExactBolt11Invoice(input: string, expectedSats: number): string {
-  if (!Number.isInteger(expectedSats) || expectedSats <= 0) throw new Error('Montant attendu invalide');
+  if (!Number.isInteger(expectedSats) || expectedSats <= 0) throw new Error(t('error.expectedAmountInvalid'));
   const unwrapped = unwrapLightning(input);
-  if (/[a-z]/.test(unwrapped) && /[A-Z]/.test(unwrapped)) throw new Error('Invoice BOLT11 invalide : casse Bech32 mélangée');
+  if (/[a-z]/.test(unwrapped) && /[A-Z]/.test(unwrapped)) throw new Error(t('error.bolt11MixedCase'));
   const normalized = unwrapped.toLowerCase();
   const parsed = parseLightningDestination(normalized);
-  if (parsed.kind !== 'BOLT11_INVOICE') throw new Error('Scanne ou colle une invoice BOLT11 Lightning ponctuelle');
-  if (!verifyBech32(normalized)) throw new Error('Invoice BOLT11 invalide : checksum Bech32 incorrect');
+  if (parsed.kind !== 'BOLT11_INVOICE') throw new Error(t('error.bolt11Expected'));
+  if (!verifyBech32(normalized)) throw new Error(t('error.bolt11Checksum'));
 
   const separator = normalized.lastIndexOf('1');
   const amount = parseBolt11AmountFromHrp(normalized.slice(0, separator));
-  if (!amount) throw new Error('Invoice BOLT11 sans montant : génère une invoice du montant exact demandé');
+  if (!amount) throw new Error(t('error.bolt11NoAmount'));
   if (amount.msats !== BigInt(expectedSats) * 1000n) {
     const invoiceSats = amount.sats === null ? `${amount.msats.toString()} msats` : `${amount.sats.toLocaleString('fr-FR')} sats`;
-    throw new Error(`Montant BOLT11 incorrect : invoice ${invoiceSats}, attendu ${expectedSats.toLocaleString('fr-FR')} sats`);
+    throw new Error(t('error.bolt11WrongAmount', { invoice: invoiceSats, expected: `${expectedSats.toLocaleString('fr-FR')} sats` }));
   }
   return normalized;
 }

@@ -1,4 +1,5 @@
 import { describe, expect, it } from 'vitest';
+import { t } from './i18n';
 import {
   clearSession,
   createEmptySession,
@@ -46,13 +47,13 @@ describe('session persistence', () => {
   });
 
   it('rejects an unknown schema version', () => {
-    expect(() => parseSession(JSON.stringify({ schemaVersion: 99 }))).toThrow(/Unsupported/);
+    expect(() => parseSession(JSON.stringify({ schemaVersion: 99 }))).toThrow(t('error.sessionSchemaUnsupported'));
   });
 
   it('rejects malformed collections instead of guessing', () => {
     const snapshot = createEmptySession('2026-09-13T12:00:00Z') as unknown as Record<string, unknown>;
     snapshot.players = 'Alice';
-    expect(() => parseSession(JSON.stringify(snapshot))).toThrow(/collections/);
+    expect(() => parseSession(JSON.stringify(snapshot))).toThrow(t('error.sessionCollectionsInvalid'));
   });
 
   it('clears only the NOIOU session key', () => {

@@ -1,4 +1,5 @@
 import type { PaymentMethod } from './domain';
+import { t } from './i18n';
 
 export type PlayerPaymentChoice = PaymentMethod | 'ANY';
 
@@ -9,9 +10,9 @@ export function initialBuyInMethods(choice: PlayerPaymentChoice): PaymentMethod[
 }
 
 export function paymentChoiceLabel(choice: PlayerPaymentChoice): string {
-  if (choice === 'CASH') return 'Espèces';
-  if (choice === 'LIGHTNING') return 'Lightning';
-  return 'Espèces ou Lightning';
+  if (choice === 'CASH') return t('common.cash');
+  if (choice === 'LIGHTNING') return t('common.lightning');
+  return t('player.payment.any');
 }
 
 export function rebuyActionClass(choice: PlayerPaymentChoice, method: PaymentMethod): string {

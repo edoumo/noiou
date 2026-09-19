@@ -1,4 +1,5 @@
 import { describe, expect, it } from 'vitest';
+import { t } from './i18n';
 import type { Game, Payout, SettlementResult } from './domain';
 import { checkGameClosure, confirmCashContribution, confirmLightningContribution, confirmPayout, createContribution, markContributionPending } from './game';
 
@@ -39,7 +40,7 @@ describe('game contribution guards', () => {
     const first = createContribution(game(), 'a', 'BUYIN', 'LIGHTNING', 'c1');
     const second = createContribution(game(), 'b', 'BUYIN', 'LIGHTNING', 'c2');
     const pending = markContributionPending([first, second], 'c1', 'inv-1');
-    expect(() => markContributionPending(pending, 'c2', 'inv-1')).toThrow(/already used/);
+    expect(() => markContributionPending(pending, 'c2', 'inv-1')).toThrow(t('error.externalReferenceUsed'));
   });
 
   it('confirms Lightning payment idempotently for the same invoice', () => {
@@ -51,7 +52,7 @@ describe('game contribution guards', () => {
   });
 
   it('blocks rebuys when disabled', () => {
-    expect(() => createContribution(game({ rebuyEnabled: false }), 'a', 'REBUY', 'CASH')).toThrow(/disabled/);
+    expect(() => createContribution(game({ rebuyEnabled: false }), 'a', 'REBUY', 'CASH')).toThrow(t('error.rebuysDisabled'));
   });
 });
 

@@ -1,3 +1,5 @@
+import { t } from './i18n';
+
 export type LightningInvoiceSource = 'MOCK' | 'NWC' | 'MANUAL_EXTERNAL';
 
 export interface LightningInvoice {
@@ -37,13 +39,13 @@ export class MockLightningAdapter implements LightningAdapter {
   }
 
   restoreInvoice(invoice: LightningInvoice): void {
-    if (!invoice.id.trim() || !Number.isInteger(invoice.sats) || invoice.sats <= 0) throw new Error('Invalid mock invoice snapshot');
-    if (invoice.source && invoice.source !== 'MOCK') throw new Error('Only mock invoices can be restored in MockLightningAdapter');
+    if (!invoice.id.trim() || !Number.isInteger(invoice.sats) || invoice.sats <= 0) throw new Error(t('error.mockInvoiceInvalid'));
+    if (invoice.source && invoice.source !== 'MOCK') throw new Error(t('error.mockOnlyRestore'));
     this.invoices.set(invoice.id, { ...invoice, source: 'MOCK' });
   }
 
   async createInvoice(sats: number, memo = 'NOIOU buy-in'): Promise<LightningInvoice> {
-    if (!Number.isInteger(sats) || sats <= 0) throw new Error('Invoice amount must be positive integer sats');
+    if (!Number.isInteger(sats) || sats <= 0) throw new Error(t('error.invoiceAmountPositiveInteger'));
     const id = crypto.randomUUID();
     const invoice: LightningInvoice = {
       id,
@@ -60,19 +62,19 @@ export class MockLightningAdapter implements LightningAdapter {
 
   async getInvoiceStatus(id: string): Promise<LightningInvoice['status']> {
     const invoice = this.invoices.get(id);
-    if (!invoice) throw new Error('Unknown invoice');
+    if (!invoice) throw new Error(t('error.unknownInvoice'));
     return invoice.status;
   }
 
   markInvoicePaid(id: string): void {
     const invoice = this.invoices.get(id);
-    if (!invoice) throw new Error('Unknown invoice');
+    if (!invoice) throw new Error(t('error.unknownInvoice'));
     this.invoices.set(id, { ...invoice, status: 'PAID' });
   }
 
   async preparePayment(destination: string, sats: number): Promise<PreparedLightningPayment> {
-    if (!destination.trim()) throw new Error('Destination is required');
-    if (!Number.isInteger(sats) || sats <= 0) throw new Error('Payment amount must be positive integer sats');
+    if (!destination.trim()) throw new Error(t('error.destinationRequired'));
+    if (!Number.isInteger(sats) || sats <= 0) throw new Error(t('error.paymentAmountPositiveInteger'));
     const id = crypto.randomUUID();
     const payment: PreparedLightningPayment = { id, destination, sats, status: 'PREPARED' };
     this.payments.set(id, payment);
@@ -81,7 +83,7 @@ export class MockLightningAdapter implements LightningAdapter {
 
   async confirmPreparedPayment(id: string): Promise<PreparedLightningPayment> {
     const payment = this.payments.get(id);
-    if (!payment) throw new Error('Unknown prepared payment');
+    if (!payment) throw new Error(t('error.unknownPreparedPayment'));
     if (payment.status === 'CONFIRMED') return payment;
     const confirmed = { ...payment, status: 'CONFIRMED' as const };
     this.payments.set(id, confirmed);

@@ -1,4 +1,5 @@
 import type { Currency } from './domain';
+import { t } from './i18n';
 
 export interface ManualLightningPayoutInput {
   label: string;
@@ -14,30 +15,35 @@ export interface ManualLightningPayoutInstruction extends ManualLightningPayoutI
 }
 
 export function payoutAmountToSats(amount: number, currency: Currency, lockedBtcFiatRate?: number): number {
-  if (!Number.isFinite(amount) || amount <= 0) throw new Error('Le montant du payout doit être positif');
+  if (!Number.isFinite(amount) || amount <= 0) throw new Error(t('error.payoutPositive'));
   if (currency === 'SATS') {
-    if (!Number.isInteger(amount)) throw new Error('Un payout en SATS doit être un nombre entier');
+    if (!Number.isInteger(amount)) throw new Error(t('error.payoutInteger'));
     return amount;
   }
   if (!lockedBtcFiatRate || !Number.isFinite(lockedBtcFiatRate) || lockedBtcFiatRate <= 0) {
-    throw new Error('Le taux BTC/fiat verrouillé est requis pour préparer le payout Lightning');
+    throw new Error(t('error.payoutRateRequired'));
   }
   const sats = Math.round((amount / lockedBtcFiatRate) * 100_000_000);
-  if (sats <= 0) throw new Error('Le payout converti vaut 0 sat');
+  if (sats <= 0) throw new Error(t('error.payoutZero'));
   return sats;
 }
 
 export function buildManualLightningPayout(input: ManualLightningPayoutInput): ManualLightningPayoutInstruction {
   const label = input.label.trim();
   const destination = input.destination.trim();
-  if (!label) throw new Error('Le bénéficiaire est requis');
-  if (!destination) throw new Error('La destination Lightning est requise');
+  if (!label) throw new Error(t('error.beneficiaryRequired'));
+  if (!destination) throw new Error(t('error.destinationRequired'));
 
   const sats = payoutAmountToSats(input.amount, input.currency, input.lockedBtcFiatRate);
   const original = input.currency === 'SATS'
     ? `${sats.toLocaleString('fr-FR')} sats`
     : new Intl.NumberFormat('fr-FR', { style: 'currency', currency: input.currency }).format(input.amount);
-  const summary = `NOIOU — payout manuel\nBénéficiaire: ${label}\nMontant partie: ${original}\nMontant Lightning: ${sats.toLocaleString('fr-FR')} sats\nDestination: ${destination}`;
+  const summary = t('manualPayout.summary', {
+    label,
+    original,
+    sats: sats.toLocaleString('fr-FR'),
+    destination,
+  });
 
   return { ...input, label, destination, sats, summary };
 }

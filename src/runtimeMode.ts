@@ -1,4 +1,5 @@
 import type { LightningReceiveMode } from './domain';
+import { t } from './i18n';
 
 export interface RuntimeFlags {
   /**
@@ -39,27 +40,27 @@ export function defaultReceiveMode(nwcConnected: boolean): LightningReceiveMode 
 export function assertReceiveModeAllowed(mode: LightningReceiveMode | string, allowMockPayments: boolean): void {
   if (mode === 'MOCK') {
     if (!allowMockPayments) {
-      throw new Error('L’encaissement fictif est désactivé dans cette version : choisis « NWC automatique » ou « Wallet externe manuel ». Aucune cave fictive ne peut être encaissée ici.');
+      throw new Error(t('error.mockDisabled'));
     }
     return;
   }
   if (mode !== 'NWC_RECEIVE_ONLY' && mode !== 'EXTERNAL_WALLET_MANUAL') {
-    throw new Error('Mode de réception Lightning inconnu : demande refusée.');
+    throw new Error(t('error.unknownReceiveMode'));
   }
 }
 
 export function receiveModeLabel(mode: LightningReceiveMode, allowMockPayments: boolean): string {
-  if (mode === 'NWC_RECEIVE_ONLY') return 'NWC automatique';
-  if (mode === 'EXTERNAL_WALLET_MANUAL') return 'Wallet externe manuel';
+  if (mode === 'NWC_RECEIVE_ONLY') return t('receiveMode.nwcAuto');
+  if (mode === 'EXTERNAL_WALLET_MANUAL') return t('receiveMode.external');
   // The dev-only label is gated on the static DEV flag so the production bundle never
   // contains mock-facing copy at all (not merely hidden at runtime).
-  if (import.meta.env.DEV && allowMockPayments) return 'Mock / test (dev)';
-  return 'Indisponible';
+  if (import.meta.env.DEV && allowMockPayments) return t('receiveMode.mockDev');
+  return t('receiveMode.unavailable');
 }
 
 export function nwcRuntimeStateLabel(nwcMode: string, allowMockPayments: boolean): string {
-  if (nwcMode === 'LIVE_ARMED') return 'NWC RÉEL';
-  if (nwcMode === 'RECONNECT_REQUIRED') return 'RECONNECTER';
-  if (nwcMode === 'DIAGNOSTIC') return 'DIAGNOSTIC';
-  return allowMockPayments ? 'MOCK' : 'MANUEL';
+  if (nwcMode === 'LIVE_ARMED') return t('nwcState.real');
+  if (nwcMode === 'RECONNECT_REQUIRED') return t('nwcState.reconnect');
+  if (nwcMode === 'DIAGNOSTIC') return t('nwcState.diagnostic');
+  return allowMockPayments ? t('nwcState.mock') : t('nwcState.manual');
 }

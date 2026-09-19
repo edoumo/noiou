@@ -1,5 +1,6 @@
 import { useEffect, useRef, useState } from 'react';
 import { BrowserQRCodeReader } from '@zxing/browser';
+import { useI18n } from './i18n/provider';
 
 interface Props {
   onDetected(value: string): void;
@@ -7,6 +8,7 @@ interface Props {
 }
 
 export default function QrCameraScanner({ onDetected, onCancel }: Props) {
+  const { t } = useI18n();
   const videoRef = useRef<HTMLVideoElement | null>(null);
   const detectedRef = useRef(onDetected);
   const [error, setError] = useState('');
@@ -35,7 +37,7 @@ export default function QrCameraScanner({ onDetected, onCancel }: Props) {
       if (cancelled) controls.stop();
     }).catch((caught) => {
       if (cancelled) return;
-      setError(caught instanceof Error ? caught.message : 'Impossible d’ouvrir la caméra');
+      setError(caught instanceof Error ? caught.message : t('qr.cameraOpenFailed'));
     });
 
     return () => {
@@ -45,14 +47,14 @@ export default function QrCameraScanner({ onDetected, onCancel }: Props) {
   }, []);
 
   return (
-    <div className="qr-scanner" role="dialog" aria-label="Scanner un QR Lightning">
+    <div className="qr-scanner" role="dialog" aria-label={t('qr.dialogAria')}>
       <div className="qr-scanner-head">
-        <strong>Scanner le QR</strong>
-        <button type="button" onClick={onCancel}>Fermer</button>
+        <strong>{t('qr.scanTitle')}</strong>
+        <button type="button" onClick={onCancel}>{t('qr.close')}</button>
       </div>
       <video ref={videoRef} className="qr-video" muted playsInline />
-      <small>Présente le QR Lightning devant la caméra. Rien n’est envoyé à un serveur NOIOU.</small>
-      {error && <div className="alert">Caméra indisponible : {error}</div>}
+      <small>{t('qr.instructions')}</small>
+      {error && <div className="alert">{t('qr.cameraUnavailable', { detail: error })}</div>}
     </div>
   );
 }

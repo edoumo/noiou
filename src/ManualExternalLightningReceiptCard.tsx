@@ -1,4 +1,5 @@
 import { useMemo, useRef, useState } from 'react';
+import { useI18n } from './i18n/provider';
 import type { LightningInvoice } from './lightning';
 import { parseLightningDestination } from './lightningDestination';
 import LightningRequestActions from './LightningRequestActions';
@@ -14,6 +15,7 @@ interface Props {
 }
 
 export default function ManualExternalLightningReceiptCard({ request, onUseBolt11, onConfirmReceived }: Props) {
+  const { t, formatNumber } = useI18n();
   const [bolt11, setBolt11] = useState('');
   const [scanning, setScanning] = useState(false);
   const [acknowledged, setAcknowledged] = useState(false);
@@ -24,6 +26,7 @@ export default function ManualExternalLightningReceiptCard({ request, onUseBolt1
   const exactInvoiceReady = parsed.kind === 'BOLT11_INVOICE';
   const cameraAvailable = typeof navigator !== 'undefined' && Boolean(navigator.mediaDevices?.getUserMedia);
   const clipboardAvailable = typeof navigator !== 'undefined' && Boolean(navigator.clipboard?.readText);
+  const satsLabel = formatNumber(request.sats);
 
   async function applyBolt11(raw: string) {
     try {
@@ -35,7 +38,7 @@ export default function ManualExternalLightningReceiptCard({ request, onUseBolt1
       setAcknowledged(false);
     } catch (error) {
       const detail = error instanceof Error ? error.message : String(error);
-      setLocalError(detail.startsWith('Invoice refusée') ? detail : `Invoice refusée par NOIOU : ${detail}`);
+      setLocalError(detail.startsWith(t('receipt.rejected').slice(2).trim()) ? detail : t('receipt.refusedByNoiou', { detail }));
     } finally {
       setBusy(false);
     }
@@ -45,17 +48,17 @@ export default function ManualExternalLightningReceiptCard({ request, onUseBolt1
     try { await applyBolt11(await decodeQrImageFile(file)); }
     catch (error) {
       const detail = error instanceof Error ? error.message : String(error);
-      setLocalError(`QR refusé par NOIOU : ${detail}`);
+      setLocalError(t('receipt.qrRefused', { detail }));
     }
   }
 
   async function pasteInvoice() {
     try {
       const text = await navigator.clipboard.readText();
-      if (!text.trim()) throw new Error('Le presse-papiers est vide.');
+      if (!text.trim()) throw new Error(t('error.clipboardEmpty'));
       setBolt11(text.trim());
     } catch (error) {
-      setLocalError(error instanceof Error ? error.message : 'Impossible de lire le presse-papiers.');
+      setLocalError(error instanceof Error ? error.message : t('error.clipboardUnreadable'));
     }
   }
 
@@ -76,53 +79,53 @@ export default function ManualExternalLightningReceiptCard({ request, onUseBolt1
     <div className="manual-receipt-card">
       <div className="manual-receipt-head">
         <div>
-          <strong>{request.sats.toLocaleString('fr-FR')} sats à encaisser</strong>
-          <small>NOIOU vérifie le montant avant d’autoriser le QR de paiement.</small>
+          <strong>{t('receipt.satsToCollect', { sats: satsLabel })}</strong>
+          <small>{t('receipt.verifyNote')}</small>
         </div>
-        <span className={`manual-badge ${exactInvoiceReady ? 'verified' : ''}`}>{exactInvoiceReady ? 'QR EXACT ✓' : 'À PRÉPARER'}</span>
+        <span className={`manual-badge ${exactInvoiceReady ? 'verified' : ''}`}>{exactInvoiceReady ? t('receipt.badge.exact') : t('receipt.badge.prepare')}</span>
       </div>
 
       {request.preparationError && !exactInvoiceReady && <div className="manual-preparation-warning" role="status">
-        <strong>Préparation automatique impossible</strong>
+        <strong>{t('receipt.autoImpossible')}</strong>
         <span>{request.preparationError}</span>
-        <small>Ce n’est pas un paiement refusé : fournis simplement une invoice BOLT11 du montant exact ci-dessous.</small>
+        <small>{t('receipt.autoImpossibleNote')}</small>
       </div>}
 
       {exactInvoiceReady ? <>
         <div className="official-payment">
           <div className="official-payment-title">
-            <span>QR officiel NOIOU</span>
-            <strong>{request.sats.toLocaleString('fr-FR')} sats</strong>
+            <span>{t('receipt.officialQr')}</span>
+            <strong>{t('invoice.sats', { sats: satsLabel })}</strong>
           </div>
           {request.traceLabel && <small className="payment-trace">{request.traceLabel}</small>}
-          <div className="invoice-qr" aria-label="QR Lightning exact validé par NOIOU">
-            <ZoomableQr value={request.request} label={`Paiement NOIOU · ${request.sats.toLocaleString('fr-FR')} sats`} />
+          <div className="invoice-qr" aria-label={t('receipt.qrAria')}>
+            <ZoomableQr value={request.request} label={t('invoice.paymentLabel', { sats: satsLabel })} />
           </div>
           <LightningRequestActions
             request={request.request}
-            label={`Paiement NOIOU · ${request.sats.toLocaleString('fr-FR')} sats`}
+            label={t('invoice.paymentLabel', { sats: satsLabel })}
             disabled={busy}
           />
-          <p>Scanne le QR avec un autre téléphone, ou utilise Ouvrir / Copier / Partager si le wallet est sur ce téléphone.</p>
+          <p>{t('receipt.howToPay')}</p>
         </div>
 
         <div className="receipt-confirmation-step">
-          <strong>Après le paiement</strong>
-          <p className="muted">NOIOU n’a pas accès au wallet externe. Vérifie l’arrivée des fonds avant de confirmer.</p>
+          <strong>{t('receipt.afterPayment')}</strong>
+          <p className="muted">{t('receipt.noWalletAccess')}</p>
           <label className="manual-confirm-check">
             <input type="checkbox" checked={acknowledged} onChange={(event) => setAcknowledged(event.target.checked)} />
-            J’ai vérifié dans le wallet de l’organisateur que les {request.sats.toLocaleString('fr-FR')} sats ont réellement été reçus.
+            {t('receipt.acknowledge', { sats: satsLabel })}
           </label>
           <button type="button" className="primary" disabled={!acknowledged || busy} onClick={() => void confirm()}>
-            Confirmer reçu · {request.sats.toLocaleString('fr-FR')} sats
+            {t('receipt.confirm', { sats: satsLabel })}
           </button>
         </div>
       </> : <div className="manual-bolt11-entry">
-        <strong>Préparer le QR exact</strong>
-        <small>Dans le wallet de l’organisateur, génère une invoice de <b>{request.sats.toLocaleString('fr-FR')} sats</b>. NOIOU la refuse si le montant, le format ou le checksum ne correspondent pas.</small>
+        <strong>{t('receipt.prepareExact')}</strong>
+        <small>{t('receipt.generateInvoice', { sats: satsLabel })}</small>
         {request.request && parsed.kind !== 'BOLT11_INVOICE' && <div className="manual-preparation-warning">
-          <strong>Destination associée : {parsed.label}</strong>
-          <span>Cette destination ne lie pas à elle seule le montant au QR. Une invoice BOLT11 exacte est requise pour ce paiement.</span>
+          <strong>{t('receipt.linkedDestination', { label: parsed.label })}</strong>
+          <span>{t('receipt.destinationNotEnough')}</span>
         </div>}
         <div className="manual-bolt11-actions">
           <input
@@ -133,23 +136,23 @@ export default function ManualExternalLightningReceiptCard({ request, onUseBolt1
             autoCorrect="off"
             spellCheck={false}
           />
-          <button type="button" disabled={!cameraAvailable || busy} onClick={() => setScanning(true)}>📷 Scanner</button>
-          <button type="button" disabled={busy} onClick={() => imageInputRef.current?.click()}>🖼️ Photos</button>
-          <button type="button" disabled={!clipboardAvailable || busy} onClick={() => void pasteInvoice()}>📋 Coller</button>
-          <button type="button" className="primary" disabled={!bolt11.trim() || busy} onClick={() => void applyBolt11(bolt11)}>Vérifier et afficher le QR</button>
+          <button type="button" disabled={!cameraAvailable || busy} onClick={() => setScanning(true)}>{t('destField.scan')}</button>
+          <button type="button" disabled={busy} onClick={() => imageInputRef.current?.click()}>{t('manualPayout.photosButton')}</button>
+          <button type="button" disabled={!clipboardAvailable || busy} onClick={() => void pasteInvoice()}>{t('destField.paste')}</button>
+          <button type="button" className="primary" disabled={!bolt11.trim() || busy} onClick={() => void applyBolt11(bolt11)}>{t('receipt.verifyAndShow')}</button>
           <input ref={imageInputRef} hidden type="file" accept="image/*" onChange={(event) => {
             const file = event.target.files?.[0];
             event.currentTarget.value = '';
             if (file) void importImage(file);
           }} />
         </div>
-        {!cameraAvailable && <small>Caméra indisponible : utilise Photos, le presse-papiers ou colle l’invoice manuellement.</small>}
+        {!cameraAvailable && <small>{t('receipt.noCamera')}</small>}
       </div>}
 
       {localError && <div className="invoice-rejected" role="alert">
-        <strong>❌ Demande refusée</strong>
+        <strong>{t('receipt.rejected')}</strong>
         <span>{localError}</span>
-        <small>Corrige la demande puis réessaie ; inutile de rescanner la même invoice.</small>
+        <small>{t('receipt.rejectedNote')}</small>
       </div>}
 
       {scanning && <QrCameraScanner

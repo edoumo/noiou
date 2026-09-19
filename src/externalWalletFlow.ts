@@ -2,6 +2,7 @@ import type { ContributionKind } from './domain';
 import type { LightningInvoice } from './lightning';
 import { parseLightningDestination } from './lightningDestination';
 import { requestExactInvoiceFromReusableDestination } from './lnurlPay';
+import { t } from './i18n';
 import { buildManualExternalReference } from './manualExternalLightning';
 
 export function shortGameReference(gameId: string): string {
@@ -17,7 +18,7 @@ export function buildTraceLabel(gameId: string, nickname: string, action: string
 }
 
 export function buildPaymentTrace(gameId: string, nickname: string, kind: ContributionKind, ordinal = 1): string {
-  return buildTraceLabel(gameId, nickname, kind === 'BUYIN' ? 'Cave' : `Rebuy ${ordinal}`);
+  return buildTraceLabel(gameId, nickname, kind === 'BUYIN' ? t('kind.buyin') : `${t('kind.rebuy')} ${ordinal}`);
 }
 
 export async function prepareExternalIncomingRequest(
@@ -38,7 +39,7 @@ export async function prepareExternalIncomingRequest(
   if (!organizerDestination?.trim()) {
     return {
       ...base,
-      preparationError: `Aucune destination Lightning réutilisable n’est associée au wallet organisateur. Génère une invoice BOLT11 de ${sats.toLocaleString('fr-FR')} sats.`,
+      preparationError: t('error.noReusableDestination', { sats: `${sats.toLocaleString('fr-FR')} sats` }),
     };
   }
 
@@ -46,14 +47,14 @@ export async function prepareExternalIncomingRequest(
   if (parsed.kind === 'BOLT12_OFFER') {
     return {
       ...base,
-      preparationError: `Offre BOLT12 associée. NOIOU ne peut pas encore en dériver une invoice liée automatiquement à ${sats.toLocaleString('fr-FR')} sats ; utilise une BOLT11 exacte pour ce paiement.`,
+      preparationError: t('error.bolt12NoInvoice', { sats: `${sats.toLocaleString('fr-FR')} sats` }),
     };
   }
 
   if (parsed.kind !== 'LIGHTNING_ADDRESS' && parsed.kind !== 'LNURL') {
     return {
       ...base,
-      preparationError: `Destination ${parsed.label} non utilisable pour générer automatiquement une invoice exacte. Utilise une BOLT11 de ${sats.toLocaleString('fr-FR')} sats.`,
+      preparationError: t('error.destinationNotUsable', { label: parsed.label, sats: `${sats.toLocaleString('fr-FR')} sats` }),
     };
   }
 

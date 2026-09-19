@@ -1,5 +1,6 @@
 import { useEffect, useRef, useState } from 'react';
 import { QRCodeSVG } from 'qrcode.react';
+import { useI18n } from './i18n/provider';
 import type { PaymentMethod, Player } from './domain';
 import { appendLedgerEvent, verifyLedger } from './ledger';
 import LightningDestinationField from './LightningDestinationField';
@@ -22,6 +23,7 @@ import './partyJoin.css';
 type Mode = 'CLOSED' | 'ORGANIZER' | 'SCAN_INVITE' | 'SCAN_RESPONSE' | 'PARTICIPANT' | 'RESPONSE';
 
 export default function PartyJoinControl() {
+  const { t, formatNumber } = useI18n();
   const [mode, setMode] = useState<Mode>('CLOSED');
   const [invite, setInvite] = useState<PartyInvite | null>(null);
   const [inviteUrl, setInviteUrl] = useState('');
@@ -44,7 +46,7 @@ export default function PartyJoinControl() {
       setMode('PARTICIPANT');
       window.history.replaceState({}, '', window.location.pathname + window.location.hash);
     } catch (caught) {
-      setError(caught instanceof Error ? caught.message : 'QR de partie invalide');
+      setError(caught instanceof Error ? caught.message : t('error.partyQrInvalid'));
     }
   }, []);
 
@@ -58,7 +60,7 @@ export default function PartyJoinControl() {
       setError('');
       if (typeof window === 'undefined') return;
       const snapshot = loadSession(window.localStorage);
-      if (!snapshot?.game || snapshot.game.status !== 'OPEN') throw new Error('Configure une partie avant d’afficher son QR d’invitation.');
+      if (!snapshot?.game || snapshot.game.status !== 'OPEN') throw new Error(t('error.partyQrConfigureFirst'));
       const chipsPerBuyIn = snapshot.game.chipsPerBuyIn ?? (() => {
         const legacy = snapshot.game.buyInAmount / snapshot.game.chipValue;
         return Number.isInteger(legacy) && legacy > 0 ? legacy : undefined;
@@ -122,10 +124,10 @@ export default function PartyJoinControl() {
       setError('');
       const response = parsePartyJoinResponse(raw);
       const snapshot = loadSession(window.localStorage);
-      if (!snapshot?.game || snapshot.game.status !== 'OPEN') throw new Error('Aucune partie ouverte à laquelle ajouter ce joueur.');
-      if (response.gameId !== snapshot.game.id) throw new Error('Cette réponse appartient à une autre partie.');
-      if (!await verifyLedger(snapshot.ledger)) throw new Error('Journal d’audit invalide : ajout du joueur bloqué.');
-      if (snapshot.players.some((player) => player.nickname.toLocaleLowerCase() === response.nickname.toLocaleLowerCase())) throw new Error('Ce pseudo est déjà utilisé dans la partie.');
+      if (!snapshot?.game || snapshot.game.status !== 'OPEN') throw new Error(t('error.partyNoOpenGame'));
+      if (response.gameId !== snapshot.game.id) throw new Error(t('error.partyOtherGame'));
+      if (!await verifyLedger(snapshot.ledger)) throw new Error(t('error.partyLedgerInvalid'));
+      if (snapshot.players.some((player) => player.nickname.toLocaleLowerCase() === response.nickname.toLocaleLowerCase())) throw new Error(t('error.partyNicknameTaken'));
 
       const player: Player = {
         id: crypto.randomUUID(),
@@ -179,46 +181,46 @@ export default function PartyJoinControl() {
 
   const paymentNeedsDestination = preferredPayment === 'LIGHTNING' || preferredPayment === 'ANY';
   const inviteTerms = invite
-    ? `${invite.currency} · cave ${invite.buyInAmount.toLocaleString('fr-FR')}${invite.chipsPerBuyIn ? ` · ${invite.chipsPerBuyIn.toLocaleString('fr-FR')} jetons` : ''}`
+    ? `${t('join.inviteTerms', { currency: invite.currency, amount: formatNumber(invite.buyInAmount) })}${invite.chipsPerBuyIn ? t('join.inviteTerms.chips', { chips: formatNumber(invite.chipsPerBuyIn) }) : ''}`
     : '';
 
   return (
     <>
       <div className="party-join-launcher">
-        <button type="button" onClick={openOrganizer}>🎟️ QR de partie</button>
-        <button type="button" onClick={() => { setError(''); setMode('SCAN_INVITE'); }}>👥 Rejoindre</button>
+        <button type="button" onClick={openOrganizer}>{t('join.launcher.qr')}</button>
+        <button type="button" onClick={() => { setError(''); setMode('SCAN_INVITE'); }}>{t('join.launcher.join')}</button>
       </div>
 
       {mode !== 'CLOSED' && <div className="party-join-backdrop" role="dialog" aria-modal="true">
         <div className="party-join-panel">
           <div className="party-join-head">
-            <div><strong>{mode === 'PARTICIPANT' || mode === 'RESPONSE' || mode === 'SCAN_INVITE' ? 'Rejoindre une partie' : 'Inviter des joueurs'}</strong><small>Échange QR local · aucun compte, aucun fonds, aucun secret wallet</small></div>
-            <button type="button" onClick={close}>Fermer</button>
+            <div><strong>{mode === 'PARTICIPANT' || mode === 'RESPONSE' || mode === 'SCAN_INVITE' ? t('join.header.join') : t('join.header.invite')}</strong><small>{t('join.header.subtitle')}</small></div>
+            <button type="button" onClick={close}>{t('join.close')}</button>
           </div>
 
           {error && <div className="alert" role="alert">{error}</div>}
 
           {mode === 'ORGANIZER' && inviteUrl && <>
-            <p>Fais scanner ce QR par le téléphone du joueur. Il voit les conditions de la cave, renseigne lui-même son pseudo et, s’il le souhaite, sa destination Lightning.</p>
+            <p>{t('join.organizer.instructions')}</p>
             <div className="party-join-qr"><QRCodeSVG value={inviteUrl} size={240} level="M" marginSize={2} /></div>
             <small className="party-join-summary">{inviteTerms}</small>
             <div className="party-join-actions">
-              <button type="button" onClick={() => setMode('SCAN_RESPONSE')}>📷 Scanner la réponse d’un joueur</button>
-              <button type="button" onClick={() => responseImageRef.current?.click()}>🖼️ Réponse depuis Photos</button>
+              <button type="button" onClick={() => setMode('SCAN_RESPONSE')}>{t('join.organizer.scanResponse')}</button>
+              <button type="button" onClick={() => responseImageRef.current?.click()}>{t('join.organizer.responseFromPhotos')}</button>
               <input ref={responseImageRef} hidden type="file" accept="image/*" onChange={(event) => {
                 const file = event.target.files?.[0];
                 event.currentTarget.value = '';
                 if (file) void importResponseImage(file);
               }} />
             </div>
-            <p className="muted">Version sans backend : le joueur renvoie un second QR que l’organisateur scanne. L’organisateur n’a rien à saisir à sa place.</p>
+            <p className="muted">{t('join.organizer.noBackend')}</p>
           </>}
 
-          {mode === 'ORGANIZER' && !inviteUrl && <p className="muted">{error || 'Aucune partie ouverte.'}</p>}
+          {mode === 'ORGANIZER' && !inviteUrl && <p className="muted">{error || t('join.organizer.noGame')}</p>}
 
           {mode === 'SCAN_INVITE' && <>
-            <p>Scanne le QR de partie affiché par l’organisateur.</p>
-            <div className="party-join-actions"><button type="button" onClick={() => inviteImageRef.current?.click()}>🖼️ QR depuis Photos</button></div>
+            <p>{t('join.scanInvite.instructions')}</p>
+            <div className="party-join-actions"><button type="button" onClick={() => inviteImageRef.current?.click()}>{t('join.scanInvite.fromPhotos')}</button></div>
             <input ref={inviteImageRef} hidden type="file" accept="image/*" onChange={(event) => {
               const file = event.target.files?.[0];
               event.currentTarget.value = '';
@@ -228,39 +230,39 @@ export default function PartyJoinControl() {
           </>}
 
           {mode === 'SCAN_RESPONSE' && <>
-            <p>Scanne le QR de réponse affiché sur le téléphone du joueur.</p>
+            <p>{t('join.scanResponse.instructions')}</p>
             <QrCameraScanner onDetected={(raw) => void acceptResponse(raw)} onCancel={() => setMode('ORGANIZER')} />
           </>}
 
           {mode === 'PARTICIPANT' && invite && <>
-            <div className="party-join-game"><strong>Partie trouvée</strong><span>{inviteTerms}</span></div>
-            <p className="muted">Vérifie ces conditions avant de rejoindre : le montant de la cave et le nombre de jetons remis viennent du QR de la partie.</p>
-            <label>Pseudo<input value={nickname} onChange={(event) => setNickname(event.target.value)} placeholder="Alice" /></label>
-            <label>Paiement de la première cave
+            <div className="party-join-game"><strong>{t('join.participant.found')}</strong><span>{inviteTerms}</span></div>
+            <p className="muted">{t('join.participant.checkTerms')}</p>
+            <label>{t('player.nickname')}<input value={nickname} onChange={(event) => setNickname(event.target.value)} placeholder="Alice" /></label>
+            <label>{t('player.firstBuyInPayment')}
               <select value={preferredPayment} onChange={(event) => setPreferredPayment(event.target.value as PaymentMethod | 'ANY')}>
-                <option value="CASH">Espèces</option>
-                <option value="LIGHTNING">Lightning</option>
-                <option value="ANY">Espèces ou Lightning</option>
+                <option value="CASH">{t('common.cash')}</option>
+                <option value="LIGHTNING">{t('common.lightning')}</option>
+                <option value="ANY">{t('player.payment.any')}</option>
               </select>
             </label>
             {paymentNeedsDestination && <LightningDestinationField
-              label="Destination Lightning"
+              label={t('player.destination')}
               value={lightningDestination}
               onChange={setLightningDestination}
               optional
-              compactHint="Optionnelle. Tu pourras aussi fournir une invoice BOLT11 ponctuelle au moment du payout."
+              compactHint={t('join.participant.destinationHint')}
             />}
-            <button type="button" className="primary wide" onClick={buildResponse}>Créer ma réponse QR</button>
+            <button type="button" className="primary wide" onClick={buildResponse}>{t('join.participant.buildResponse')}</button>
           </>}
 
           {mode === 'RESPONSE' && responseQr && <>
-            <p>Montre ce QR à l’organisateur. Lorsqu’il le scanne, ton joueur est ajouté à sa partie sans qu’il ressaisisse tes informations.</p>
+            <p>{t('join.response.instructions')}</p>
             <div className="party-join-qr"><QRCodeSVG value={responseQr} size={240} level="M" marginSize={2} /></div>
-            <div className="party-join-game"><strong>{nickname.trim()}</strong><span>1re cave : {paymentChoiceLabel(preferredPayment)}</span></div>
-            <p className="muted">Ce QR contient uniquement les informations de participation que tu viens de saisir. Aucune seed, clé privée ou autorisation wallet.</p>
+            <div className="party-join-game"><strong>{nickname.trim()}</strong><span>{t('join.response.terms', { method: paymentChoiceLabel(preferredPayment) })}</span></div>
+            <p className="muted">{t('join.response.privacy')}</p>
           </>}
 
-          {busy && <small>Ajout en cours…</small>}
+          {busy && <small>{t('join.busy')}</small>}
         </div>
       </div>}
     </>

@@ -1,4 +1,5 @@
 import { describe, expect, it } from 'vitest';
+import { t } from './i18n';
 import type { Contribution, Game, Player } from './domain';
 import { calculateIssuedChips, calculateSettlement, computeDealerCompensation } from './settlement';
 
@@ -89,15 +90,15 @@ describe('settlement', () => {
   });
 
   it('rejects a paid contribution that does not match the configured cave amount', () => {
-    expect(() => calculateIssuedChips(game(), [paid('1','a',19)])).toThrow(/configured buy-in/);
+    expect(() => calculateIssuedChips(game(), [paid('1','a',19)])).toThrow(t('error.contributionAmountMismatch'));
   });
 
   it('rejects negative or fractional physical chip counts', () => {
-    expect(() => calculateSettlement(game(), players, [paid('1','a')], [{ playerId:'a', chips:-1 }])).toThrow(/non-negative integers/);
-    expect(() => calculateSettlement(game(), players, [paid('1','a')], [{ playerId:'a', chips:19.5 }])).toThrow(/non-negative integers/);
+    expect(() => calculateSettlement(game(), players, [paid('1','a')], [{ playerId:'a', chips:-1 }])).toThrow(t('error.finalChipsNonNegative'));
+    expect(() => calculateSettlement(game(), players, [paid('1','a')], [{ playerId:'a', chips:19.5 }])).toThrow(t('error.finalChipsNonNegative'));
   });
 
   it('rejects duplicate final stacks for the same player', () => {
-    expect(() => calculateSettlement(game(), players, [paid('1','a')], [{ playerId:'a', chips:10 }, { playerId:'a', chips:10 }])).toThrow(/Duplicate/);
+    expect(() => calculateSettlement(game(), players, [paid('1','a')], [{ playerId:'a', chips:10 }, { playerId:'a', chips:10 }])).toThrow(t('error.duplicateFinalStack', { player: 'a' }));
   });
 });

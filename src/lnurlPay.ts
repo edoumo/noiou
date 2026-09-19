@@ -1,5 +1,6 @@
 import { parseLightningDestination } from './lightningDestination';
 import { parseExactBolt11Invoice } from './manualExternalLightning';
+import { t } from './i18n';
 
 const BECH32_CHARSET = 'qpzry9x8gf2tvdw0s3jn54khce6mua7l';
 
@@ -45,18 +46,18 @@ function hrpExpand(hrp: string): number[] {
 }
 
 function decodeBech32Words(value: string): { hrp: string; words: number[] } {
-  if (/[a-z]/.test(value) && /[A-Z]/.test(value)) throw new Error('LNURL invalide : casse Bech32 mélangée');
+  if (/[a-z]/.test(value) && /[A-Z]/.test(value)) throw new Error(t('error.lnurlMixedCase'));
   const normalized = value.toLowerCase();
   const separator = normalized.lastIndexOf('1');
-  if (separator < 1 || separator + 7 > normalized.length) throw new Error('LNURL invalide : format Bech32 incorrect');
+  if (separator < 1 || separator + 7 > normalized.length) throw new Error(t('error.lnurlFormat'));
   const hrp = normalized.slice(0, separator);
   const encoded = normalized.slice(separator + 1);
   const values = Array.from(encoded, (char) => {
     const index = BECH32_CHARSET.indexOf(char);
-    if (index < 0) throw new Error('LNURL invalide : caractère Bech32 inconnu');
+    if (index < 0) throw new Error(t('error.lnurlChar'));
     return index;
   });
-  if (bech32Polymod([...hrpExpand(hrp), ...values]) !== 1) throw new Error('LNURL invalide : checksum Bech32 incorrect');
+  if (bech32Polymod([...hrpExpand(hrp), ...values]) !== 1) throw new Error(t('error.lnurlChecksum'));
   return { hrp, words: values.slice(0, -6) };
 }
 
@@ -66,7 +67,7 @@ function convertBits(words: readonly number[], fromBits: number, toBits: number)
   const output: number[] = [];
   const maxValue = (1 << toBits) - 1;
   for (const word of words) {
-    if (word < 0 || word >= (1 << fromBits)) throw new Error('LNURL invalide : données Bech32 hors plage');
+    if (word < 0 || word >= (1 << fromBits)) throw new Error(t('error.lnurlRange'));
     accumulator = (accumulator << fromBits) | word;
     bits += fromBits;
     while (bits >= toBits) {
@@ -74,21 +75,21 @@ function convertBits(words: readonly number[], fromBits: number, toBits: number)
       output.push((accumulator >> bits) & maxValue);
     }
   }
-  if (bits >= fromBits) throw new Error('LNURL invalide : padding Bech32 incorrect');
-  if (((accumulator << (toBits - bits)) & maxValue) !== 0) throw new Error('LNURL invalide : padding Bech32 non nul');
+  if (bits >= fromBits) throw new Error(t('error.lnurlPadding'));
+  if (((accumulator << (toBits - bits)) & maxValue) !== 0) throw new Error(t('error.lnurlPaddingNonZero'));
   return new Uint8Array(output);
 }
 
 export function decodeLnurlToUrl(lnurl: string): string {
   const { hrp, words } = decodeBech32Words(lnurl.trim());
-  if (hrp !== 'lnurl') throw new Error('LNURL invalide : préfixe attendu lnurl');
+  if (hrp !== 'lnurl') throw new Error(t('error.lnurlPrefix'));
   const decoded = new TextDecoder().decode(convertBits(words, 5, 8));
   return assertSafeLnurlEndpoint(decoded, 'LNURL');
 }
 
 export function lightningAddressToUrl(address: string): string {
   const parsed = parseLightningDestination(address);
-  if (parsed.kind !== 'LIGHTNING_ADDRESS') throw new Error('Adresse Lightning invalide');
+  if (parsed.kind !== 'LIGHTNING_ADDRESS') throw new Error(t('error.lightningAddressInvalid'));
   const [name, domain] = parsed.value.split('@');
   return assertSafeLnurlEndpoint(`https://${domain}/.well-known/lnurlp/${encodeURIComponent(name)}`, 'Lightning Address');
 }
@@ -98,13 +99,13 @@ function assertSafeLnurlEndpoint(raw: string, label: string): string {
   try {
     url = new URL(raw);
   } catch {
-    throw new Error(`${label} invalide : URL de service illisible`);
+    throw new Error(t('error.invoiceMissing', { label }));
   }
-  if (url.protocol !== 'https:') throw new Error(`${label} non supporté : le service doit utiliser HTTPS`);
-  if (url.username || url.password) throw new Error(`${label} invalide : identifiants intégrés interdits`);
+  if (url.protocol !== 'https:') throw new Error(t('error.httpsRequired', { label }));
+  if (url.username || url.password) throw new Error(t('error.credentialsForbidden', { label }));
   const host = url.hostname.toLowerCase();
   if (host === 'localhost' || host.endsWith('.local') || host === '127.0.0.1' || host === '::1') {
-    throw new Error(`${label} refusé : destination locale interdite`);
+    throw new Error(t('error.localNotAllowed', { label }));
   }
   return url.toString();
 }
@@ -127,27 +128,27 @@ async function fetchJson<T>(fetcher: FetchLike, url: string, label: string): Pro
   try {
     response = await fetcher(url, { method: 'GET', headers: { Accept: 'application/json' } });
   } catch {
-    throw new Error(`${label} inaccessible depuis ce navigateur. Utilise le fallback invoice BOLT11 exacte.`);
+    throw new Error(t('error.unreachable', { label }));
   }
-  if (!response.ok) throw new Error(`${label} a répondu HTTP ${response.status}. Utilise le fallback invoice BOLT11 exacte.`);
+  if (!response.ok) throw new Error(t('error.httpError', { label, status: response.status }));
   try {
     return await response.json() as T;
   } catch {
-    throw new Error(`${label} a renvoyé une réponse illisible. Utilise le fallback invoice BOLT11 exacte.`);
+    throw new Error(t('error.unreadable', { label }));
   }
 }
 
 function validatePayParams(value: LnurlPayParams, sats: number): void {
-  if (value.status === 'ERROR') throw new Error(`Service Lightning refusé : ${value.reason || 'erreur sans détail'}`);
-  if (value.tag !== 'payRequest') throw new Error('Destination Lightning refusée : le service ne propose pas LNURL-pay');
+  if (value.status === 'ERROR') throw new Error(t('error.serviceRefused', { reason: value.reason || t('error.reasonNoDetail') }));
+  if (value.tag !== 'payRequest') throw new Error(t('error.notLnurlPay'));
   if (!Number.isFinite(value.minSendable) || !Number.isFinite(value.maxSendable) || value.minSendable <= 0 || value.maxSendable < value.minSendable) {
-    throw new Error('Destination Lightning refusée : limites LNURL-pay invalides');
+    throw new Error(t('error.lnurlLimits'));
   }
   const msats = sats * 1000;
   if (msats < value.minSendable || msats > value.maxSendable) {
     const min = Math.ceil(value.minSendable / 1000);
     const max = Math.floor(value.maxSendable / 1000);
-    throw new Error(`Montant refusé par le wallet : ${sats.toLocaleString('fr-FR')} sats demandés, plage autorisée ${min.toLocaleString('fr-FR')}–${max.toLocaleString('fr-FR')} sats`);
+    throw new Error(t('error.amountOutOfRange', { sats: sats.toLocaleString('fr-FR'), min: min.toLocaleString('fr-FR'), max: max.toLocaleString('fr-FR') }));
   }
   assertSafeLnurlEndpoint(value.callback, 'Callback LNURL-pay');
 }
@@ -158,10 +159,10 @@ export async function requestExactInvoiceFromReusableDestination(
   traceComment: string,
   fetcher: FetchLike = fetch,
 ): Promise<ExactLightningInvoiceResult> {
-  if (!Number.isInteger(sats) || sats <= 0) throw new Error('Montant Lightning attendu invalide');
+  if (!Number.isInteger(sats) || sats <= 0) throw new Error(t('error.lightningAmountInvalid'));
   const parsed = parseLightningDestination(destination);
   if (parsed.kind !== 'LIGHTNING_ADDRESS' && parsed.kind !== 'LNURL') {
-    throw new Error('Cette destination réutilisable ne permet pas encore à NOIOU de générer une invoice exacte. Utilise une invoice BOLT11 du montant demandé.');
+    throw new Error(t('error.notExactInvoice'));
   }
 
   const payUrl = parsed.kind === 'LIGHTNING_ADDRESS'
@@ -177,15 +178,15 @@ export async function requestExactInvoiceFromReusableDestination(
   if (comment) callback.searchParams.set('comment', comment);
 
   const invoiceResponse = await fetchJson<{ pr?: string; status?: string; reason?: string }>(fetcher, callback.toString(), 'Callback LNURL-pay');
-  if (invoiceResponse.status === 'ERROR') throw new Error(`Création de l’invoice refusée : ${invoiceResponse.reason || 'erreur sans détail'}`);
-  if (!invoiceResponse.pr) throw new Error('Création de l’invoice refusée : aucune invoice BOLT11 reçue');
+  if (invoiceResponse.status === 'ERROR') throw new Error(t('error.invoiceCreationRefused', { reason: invoiceResponse.reason || t('error.reasonNoDetail') }));
+  if (!invoiceResponse.pr) throw new Error(t('error.noBolt11Received'));
 
   let invoice: string;
   try {
     invoice = parseExactBolt11Invoice(invoiceResponse.pr, sats);
   } catch (error) {
     const detail = error instanceof Error ? error.message : String(error);
-    throw new Error(`Invoice refusée par NOIOU : ${detail}`);
+    throw new Error(t('error.invoiceRefusedByNoiou', { detail }));
   }
 
   return {

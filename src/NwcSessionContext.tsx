@@ -1,3 +1,4 @@
+import { t } from './i18n';
 import { createContext, useContext, useEffect, useMemo, useRef, useState, type ReactNode } from 'react';
 import type { LightningInvoice } from './lightning';
 import { NwcReceiveOnlyAdapter, type NwcReceiveConnectionInfo } from './nwcReceive';
@@ -28,15 +29,15 @@ interface NwcSessionValue {
 const NwcSessionContext = createContext<NwcSessionValue | null>(null);
 
 export function assertLiveGameInvoiceAmount(sats: number): void {
-  if (!Number.isInteger(sats) || sats <= 0) throw new Error('Le montant Lightning doit être un nombre entier positif de sats');
+  if (!Number.isInteger(sats) || sats <= 0) throw new Error(t('error.nwcAmountPositive'));
   if (sats > MAX_LIVE_GAME_INVOICE_SATS) {
-    throw new Error(`Par sécurité, une cave Lightning réelle est limitée à ${MAX_LIVE_GAME_INVOICE_SATS.toLocaleString('fr-FR')} sats dans cette version privée`);
+    throw new Error(t('error.nwcCapExceeded', { limit: MAX_LIVE_GAME_INVOICE_SATS.toLocaleString('fr-FR') }));
   }
 }
 
 export function assertRealNwcGameCurrency(currency: string | undefined): void {
   if (currency !== REAL_NWC_ALPHA_CURRENCY) {
-    throw new Error('Alpha NWC réel : les caves et rebuys réels sont autorisés uniquement pour une partie en SATS.');
+    throw new Error(t('error.nwcSatsOnlyAuth'));
   }
 }
 
@@ -80,10 +81,10 @@ export function NwcSessionProvider({ children }: { children: ReactNode }) {
     async function createGameInvoice(sats: number, memo?: string) {
       const adapter = adapterRef.current;
       if (!adapter) {
-        if (activeGameLockedToNwc) throw new Error('Cette partie est verrouillée en NWC réel : reconnecte le wallet receive-only avant de créer une nouvelle cave/rebuy');
-        throw new Error('Reconnecte un wallet NWC receive-only avant de créer une cave réelle');
+        if (activeGameLockedToNwc) throw new Error(t('error.nwcGameLocked'));
+        throw new Error(t('error.nwcReconnectCreate'));
       }
-      if (!liveGameReceiptsArmed && !activeGameLockedToNwc) throw new Error('Les caves Lightning réelles ne sont pas armées');
+      if (!liveGameReceiptsArmed && !activeGameLockedToNwc) throw new Error(t('error.nwcArmFirst'));
 
       // Real-money alpha is deliberately SATS-only until fiat/minor-unit accounting is migrated
       // away from generic JavaScript numbers. The persisted active game is authoritative.
@@ -104,7 +105,7 @@ export function NwcSessionProvider({ children }: { children: ReactNode }) {
       activeGameLockedToNwc,
       async connect(uri: string) {
         const secretUri = uri.trim();
-        if (!secretUri) throw new Error('URI NWC manquante');
+        if (!secretUri) throw new Error(t('error.nwcUriMissing'));
 
         const next = await NwcReceiveOnlyAdapter.connect(secretUri);
         const previous = adapterRef.current;
@@ -128,29 +129,29 @@ export function NwcSessionProvider({ children }: { children: ReactNode }) {
         // silently create mock invoices just because the credential is temporarily absent.
       },
       armLiveGameReceipts() {
-        if (!adapterRef.current || !connection) throw new Error('Connecte un wallet NWC receive-only avant d’armer les caves réelles');
+        if (!adapterRef.current || !connection) throw new Error(t('error.nwcArmConnectFirst'));
         setLiveGameReceiptsArmed(true);
       },
       disarmLiveGameReceipts() {
         // The persisted active session is authoritative. This also lets an in-memory lock be
         // released after the game has been closed/reset without requiring a page reload.
         if (readActiveGameNwcLock()) {
-          throw new Error('Cette partie a déjà utilisé/validé le mode NWC réel : impossible de revenir à un encaissement non NWC avant sa clôture/réinitialisation');
+          throw new Error(t('error.nwcModeLocked'));
         }
         setLiveGameReceiptsArmed(false);
         setActiveGameLockedToNwc(false);
       },
       async createDiagnosticInvoice(sats: number, memo?: string) {
         const adapter = adapterRef.current;
-        if (!adapter) throw new Error('Reconnecte un wallet NWC receive-only avant de créer une invoice réelle');
+        if (!adapter) throw new Error(t('error.nwcReconnectInvoice'));
         return adapter.createInvoice(sats, memo);
       },
       createGameInvoice,
       createInvoice: createGameInvoice,
       async getInvoiceStatus(invoice: LightningInvoice) {
         const adapter = adapterRef.current;
-        if (!adapter) throw new Error('Reconnecte le wallet NWC receive-only pour vérifier cette invoice');
-        if (invoice.source !== 'NWC') throw new Error('Cette invoice ne provient pas de NWC');
+        if (!adapter) throw new Error(t('error.nwcReconnectVerify'));
+        if (invoice.source !== 'NWC') throw new Error(t('error.nwcInvoiceSource'));
         adapter.restoreInvoice(invoice);
         const status = await adapter.getInvoiceStatus(invoice.id);
         if (status === 'PAID') setActiveGameLockedToNwc(true);

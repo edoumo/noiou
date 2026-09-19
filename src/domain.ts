@@ -1,4 +1,14 @@
-export type Currency = 'EUR' | 'USD' | 'SATS';
+import type { LockedRate } from './priceOracle';
+
+/**
+ * Game currency. One fiat code per public locale's region (see
+ * `DEFAULT_CURRENCY_BY_LOCALE` in `src/currency.ts`), plus the native SATS
+ * unit. A game's currency is fixed at creation and never follows a language
+ * change afterwards.
+ */
+export type Currency = 'EUR' | 'USD' | 'GBP' | 'DKK' | 'HUF' | 'JPY' | 'KRW' | 'SATS';
+/** Every supported currency except the native satoshi unit. */
+export type FiatCurrency = Exclude<Currency, 'SATS'>;
 export type PaymentMethod = 'CASH' | 'LIGHTNING';
 export type GameStatus = 'DRAFT' | 'OPEN' | 'SETTLING' | 'CLOSED' | 'CANCELLED';
 export type DealerMode = 'NONE' | 'FIXED' | 'PERCENT' | 'END_OF_GAME';
@@ -19,6 +29,7 @@ export type LedgerEventType =
   | 'LIGHTNING_MANUAL_REQUEST_CREATED'
   | 'LIGHTNING_MANUAL_RECEIPT_CONFIRMED'
   | 'RECEIVE_MODE_MIGRATED'
+  | 'PRICE_RATE_LOCKED'
   | 'CASH_CONFIRMED'
   | 'CONTRIBUTION_PAID'
   | 'SETTLEMENT_STARTED'
@@ -75,7 +86,31 @@ export interface Game {
   dealer: DealerRule;
   lightningReceiveMode?: LightningReceiveMode;
   organizerLightningDestination?: string;
+  /**
+   * Legacy flat BTC/fiat rate, kept so schema-v1 sessions and backups created
+   * before the price-oracle work remain readable byte-for-byte. New games ALSO
+   * write `lockedRate`; the flat number is mirrored from it for compatibility.
+   */
   lockedBtcFiatRate?: number;
+  /**
+   * Immutable BTC/fiat rate metadata locked at game creation (provider, pair,
+   * bid/ask, midpoint rate, retrieval/lock timestamps, manual flag + note).
+   * Written once by `applyLockedRateToGame`; never mutated afterwards, so a
+   * settings change can never alter an active game.
+   *
+   * OPTIONAL by design: a cash-only fiat game needs no BTC rate at all, so it
+   * is created (and can run fully offline) without one. A Lightning feature
+   * that would need a conversion on such a game fails explicitly instead of
+   * inventing a rate.
+   */
+  lockedRate?: LockedRate;
+  /**
+   * True when the game was declared cash-only at creation: no BTC/fiat rate
+   * was needed, no market call was made, and Lightning conversions are not
+   * available on this game. Optional so legacy sessions and backups created
+   * before this field remain readable byte-for-byte.
+   */
+  cashOnly?: boolean;
   createdAt: string;
   /**
    * UX23 lobby marker. New games use lobbyVersion=1 and remain in preparation until startedAt is set.

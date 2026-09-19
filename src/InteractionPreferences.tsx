@@ -1,14 +1,8 @@
 import { useEffect, useRef, useState } from 'react';
-import {
-  DEFAULT_PREFERENCES,
-  SUPPORTED_LOCALES,
-  isFinancialActionLabel,
-  loadUserPreferences,
-  preferenceText,
-  saveUserPreferences,
-  type SupportedLocale,
-  type UserPreferences,
-} from './preferences';
+import { useI18n } from './i18n/provider';
+import { DEFAULT_PREFERENCES, isFinancialActionLabel, loadUserPreferences, saveUserPreferences, type UserPreferences } from './preferences';
+import { PRICE_PROVIDER_IDS, providerLabelKey } from './priceOracle';
+import { localeDescriptor } from './i18n/locales';
 import './preferences.css';
 
 function readPreferences(): UserPreferences {
@@ -32,13 +26,17 @@ function playTone(context: AudioContext, frequency: number, durationMs: number, 
 
 export default function InteractionPreferences() {
   const [preferences, setPreferences] = useState<UserPreferences>(() => readPreferences());
+  const { locale, publicLocales, t, setLocale } = useI18n();
   const audioContextRef = useRef<AudioContext | null>(null);
+
+  // The selector only offers locales whose catalog is complete, and the
+  // preference store is aligned with the active locale so a reload restores it.
+  const catalogReady = publicLocales.length > 1 && publicLocales.some((entry) => entry.code === locale);
 
   useEffect(() => {
     if (typeof window === 'undefined') return;
-    saveUserPreferences(window.localStorage, preferences);
-    document.documentElement.lang = preferences.locale;
-  }, [preferences]);
+    saveUserPreferences(window.localStorage, { ...preferences, locale });
+  }, [preferences, locale]);
 
   useEffect(() => {
     if (typeof document === 'undefined') return;
@@ -87,19 +85,33 @@ export default function InteractionPreferences() {
 
   return (
     <details className="global-preferences">
-      <summary>⚙ {preferenceText(preferences.locale, 'settings')}</summary>
+      <summary>⚙ {t('prefs.settings')}</summary>
       <div className="global-preferences-panel">
-        <label>{preferenceText(preferences.locale, 'language')}
+        {catalogReady && <>
+          <label>{t('prefs.language')}
+            <select
+              value={locale}
+              onChange={(event) => setLocale(event.target.value)}
+            >
+              {publicLocales.map((entry) => (
+                <option key={entry.code} value={entry.code}>{entry.flag} {localeDescriptor(entry.code)?.name ?? entry.name}</option>
+              ))}
+            </select>
+          </label>
+        </>}
+
+        {/* Preferred BTC/fiat rate source for the NEXT game. Persisted locally;
+            an active game keeps its own locked rate and is never affected. */}
+        <label>{t('rate.source')}
           <select
-            value={preferences.locale}
-            onChange={(event) => update({ locale: event.target.value as SupportedLocale })}
+            value={preferences.rateProvider}
+            onChange={(event) => update({ rateProvider: event.target.value as typeof preferences.rateProvider })}
           >
-            {SUPPORTED_LOCALES.map((locale) => (
-              <option key={locale.code} value={locale.code}>{locale.flag} {locale.name}</option>
+            {PRICE_PROVIDER_IDS.map((provider) => (
+              <option key={provider} value={provider}>{t(providerLabelKey(provider))}</option>
             ))}
           </select>
         </label>
-        <small>{preferenceText(preferences.locale, 'languageNote')}</small>
 
         <label className="preference-toggle">
           <input
@@ -107,7 +119,7 @@ export default function InteractionPreferences() {
             checked={preferences.vibrateOnPress}
             onChange={(event) => update({ vibrateOnPress: event.target.checked })}
           />
-          <span><strong>{preferenceText(preferences.locale, 'vibration')}</strong><small>{preferenceText(preferences.locale, 'vibrationNote')}</small></span>
+          <span><strong>{t('prefs.vibration')}</strong><small>{t('prefs.vibrationNote')}</small></span>
         </label>
 
         <label className="preference-toggle">
@@ -116,7 +128,7 @@ export default function InteractionPreferences() {
             checked={preferences.clickSound}
             onChange={(event) => update({ clickSound: event.target.checked })}
           />
-          <span><strong>{preferenceText(preferences.locale, 'clickSound')}</strong><small>{preferenceText(preferences.locale, 'clickSoundNote')}</small></span>
+          <span><strong>{t('prefs.clickSound')}</strong><small>{t('prefs.clickSoundNote')}</small></span>
         </label>
 
         <label className="preference-toggle">
@@ -125,7 +137,7 @@ export default function InteractionPreferences() {
             checked={preferences.financialSound}
             onChange={(event) => update({ financialSound: event.target.checked })}
           />
-          <span><strong>{preferenceText(preferences.locale, 'financialSound')}</strong><small>{preferenceText(preferences.locale, 'financialSoundNote')}</small></span>
+          <span><strong>{t('prefs.financialSound')}</strong><small>{t('prefs.financialSoundNote')}</small></span>
         </label>
       </div>
     </details>
