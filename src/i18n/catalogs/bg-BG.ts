@@ -8,7 +8,6 @@ import type { Catalog } from '../types';
 import type { TranslationKey } from './fr-FR';
 
 export const bg_BG: Record<TranslationKey, string> = {
-  'app.eyebrow': 'Частна алфа · физическа маса',
   'app.nonCustodial': 'Некастодиален по дизайн',
   'app.steps.aria': 'Стъпки на играта',
   'app.steps.collect': 'Инкасирай',
