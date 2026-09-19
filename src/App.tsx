@@ -53,9 +53,9 @@ import {
 } from './ratePlan';
 import {
   fetchQuote,
+  PriceOracleError,
   providerLabelKey,
   PRICE_PROVIDER_IDS,
-  type PriceOracleError,
   type RateProviderId,
   type RateQuote,
 } from './priceOracle';
@@ -485,14 +485,31 @@ export default function App() {
     }
     if (plan.kind === 'NEEDS_QUOTE') {
       // A fetch is attempted at most once per click: no automatic retry loop.
-      const quote = await fetchQuote({
-        provider: rateProvider,
-        quote: currency === 'USD' ? 'USD' : 'EUR',
-        isOnline: () => online,
-      });
-      setRateQuote(quote);
-      setRateQuoteError(null);
-      return planRateLock({ currency, provider: rateProvider, manualRate, manualNote: manualRateNote, manualConfirmed: manualRateConfirmed, quote, nowMs: Date.now() });
+      try {
+        const quote = await fetchQuote({
+          provider: rateProvider,
+          quote: currency === 'USD' ? 'USD' : 'EUR',
+          isOnline: () => online,
+        });
+        setRateQuote(quote);
+        setRateQuoteError(null);
+        return planRateLock({ currency, provider: rateProvider, manualRate, manualNote: manualRateNote, manualConfirmed: manualRateConfirmed, quote, nowMs: Date.now() });
+      } catch (caught) {
+        // The raw provider error is a technical English string: it must NEVER
+        // reach the organizer. Surface it through the rate-source panel (which
+        // offers Retry / Change source / Use a manual rate) and raise the
+        // localized, explicit message instead.
+        const oracleError = caught instanceof PriceOracleError
+          ? caught
+          : new PriceOracleError('NETWORK', caught instanceof Error ? caught.message : String(caught), rateProvider);
+        setRateQuoteError(oracleError);
+        setRateQuote(null);
+        const providerName = t(providerLabelKey(rateProvider));
+        const network = ['OFFLINE', 'NETWORK', 'TIMEOUT'].includes(oracleError.code);
+        throw new Error(network
+          ? `${t('rate.offlineTitle')} ${t('rate.offlineBody', { provider: providerName })}`
+          : `${t('rate.errorTitle')} ${t('rate.errorBody', { provider: providerName })}`);
+      }
     }
     return plan;
   }

@@ -134,7 +134,7 @@ export function RateSourceControl({ currency, state, online, onChange, fetchImpl
 
           {state.quote && (
             <p className="rate-quote-line">
-              <strong>{t('rate.quotePair', { pair: state.quote.pair })}</strong>
+              <strong>{t('rate.quotePair', { quote: state.quote.quote })}</strong>
               {' · '}
               {t('rate.quoteMidpoint', {
                 bid: formatNumber(state.quote.bid, { maximumFractionDigits: 2 }),
