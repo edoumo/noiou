@@ -1227,7 +1227,11 @@ export default function App() {
       <header>
         <div>
           <p className="eyebrow">{t('app.eyebrow')}</p>
-          <h1>NOIOU</h1>
+          <h1 className="sr-only">NOIOU</h1>
+          <div className="app-brand-lockup" aria-hidden="true">
+            <img className="app-brand-logo app-brand-logo-light-theme" src="/brand/noiou-logo-on-light.svg" alt="" />
+            <img className="app-brand-logo app-brand-logo-dark-theme" src="/brand/noiou-logo-on-dark.svg" alt="" />
+          </div>
           <p className="tagline">{t('app.tagline')}</p>
         </div>
         <div className="header-controls">
