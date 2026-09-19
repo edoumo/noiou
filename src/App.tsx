@@ -1278,12 +1278,18 @@ export default function App() {
                 ))}
               </select>
             </label>
-            {currencyPreference.auto && defaultCurrencyForLocale(locale) && <p className="muted currency-default-note">
+            {/* The currency block is a protected zone: the floating shortcuts
+                and the settings pill must step aside rather than cover the
+                selector, its hint and the cash-only switch below it. Each
+                element carries its own marker so the dodge follows the ink
+                and never the (tall) grid box. */}
+            {currencyPreference.auto && defaultCurrencyForLocale(locale) && <p className="muted currency-default-note" data-floating-safe-zone="currency-default">
               {t('game.currencyDefaultNote', { currency: defaultCurrencyForLocale(locale) ?? '' })}
             </p>}
             {!currencyPreference.auto && <button
               type="button"
               className="currency-reset"
+              data-floating-safe-zone="currency-reset"
               onClick={() => {
                 const next: CreationCurrencyPreference = { auto: true, currency: defaultCurrencyForLocale(locale) ?? 'EUR' };
                 setCurrencyPreference(next);
@@ -1296,7 +1302,7 @@ export default function App() {
             <label>{t('game.chipsPerBuyIn')}
               <input type="number" min="1" step="1" value={chipsPerBuyIn} onChange={(event) => setChipsPerBuyIn(Number(event.target.value))} />
             </label>
-            <label className="check"><input
+            <label className="check" data-floating-safe-zone="cash-only"><input
               type="checkbox"
               checked={cashOnly}
               onChange={(event) => {
