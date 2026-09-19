@@ -78,6 +78,37 @@ export function floatingBoxes(doc: Document): DOMRect[] {
 }
 
 /**
+ * Content boxes of one protected zone: the elements that actually carry text
+ * (leaf-ish) and the interactive controls it contains.
+ *
+ * The zone's own bounding box is deliberately NOT used: a tall section (the
+ * caves list, the settlement card) would always clip the floating band and the
+ * shortcuts would then hide permanently. What matters is the actual ink — a
+ * text line or a control the user needs to read or tap.
+ */
+const INTERACTIVE_TAGS = new Set(['button', 'a', 'input', 'select', 'textarea', 'summary']);
+
+function zoneContentBoxes(zone: HTMLElement): DOMRect[] {
+  const boxes: DOMRect[] = [];
+  for (const element of Array.from(zone.querySelectorAll<HTMLElement>('*'))) {
+    const directText = Array.from(element.childNodes).some((node) => node.nodeType === 3 && (node.textContent ?? '').trim().length > 0);
+    const tag = element.tagName?.toLowerCase() ?? '';
+    const interactive = INTERACTIVE_TAGS.has(tag) || element.getAttribute('role') === 'button';
+    if (!directText && !interactive) continue;
+    if (element.checkVisibility && !element.checkVisibility()) continue;
+    const rect = element.getBoundingClientRect();
+    if (rect.width > 1 && rect.height > 1) boxes.push(rect);
+  }
+  // The zone's own direct text (rare) still counts.
+  const direct = Array.from(zone.childNodes).some((node) => node.nodeType === 3 && (node.textContent ?? '').trim().length > 0);
+  if (direct) {
+    const rect = zone.getBoundingClientRect();
+    if (rect.width > 1 && rect.height > 1) boxes.push(rect);
+  }
+  return boxes;
+}
+
+/**
  * Compute whether any protected target intersects the floating shortcuts.
  *
  * Exported for unit testing.
@@ -91,13 +122,13 @@ export function protectedContentInBand(doc: Document, win: Window): boolean {
   const floatingRoots = Array.from(doc.querySelectorAll<HTMLElement>(FLOATING_SELECTOR));
   const isFloating = (element: Element): boolean => floatingRoots.some((root) => root === element || root.contains(element));
 
-  // 1. Explicit safe zones: anything marked is protected whatever its size, as
-  //    soon as ANY part of the zone's ink/controls falls under an obstacle.
+  // 1. Explicit safe zones: the zone's ink and controls are protected — but
+  //    only what is actually on screen, never the whole (possibly huge) box.
   for (const zone of Array.from(doc.querySelectorAll<HTMLElement>(SAFE_ZONE_SELECTOR))) {
     if (isFloating(zone)) continue;
-    const box = zone.getBoundingClientRect();
-    if (!isMeasurable(box)) continue;
-    if (anyOverlap(box, floating)) return true;
+    for (const box of zoneContentBoxes(zone)) {
+      if (anyOverlap(box, floating)) return true;
+    }
   }
 
   const viewportHeight = win.innerHeight || doc.documentElement.clientHeight;
@@ -111,12 +142,6 @@ export function protectedContentInBand(doc: Document, win: Window): boolean {
     if (box.bottom < bandTop || box.top > viewportHeight) continue;
     if (anyOverlap(box, floating)) return true;
   }
-
-  // Deliberately NOT a rule: "any interactive control under an obstacle".
-  // On a long page a fixed control would then hide itself permanently and
-  // become unreachable — the opposite of the goal. The mandated important
-  // zones are enumerated above, and a control they contain is already covered
-  // by rule 1 through its zone.
 
   return false;
 }

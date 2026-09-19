@@ -1,12 +1,3 @@
-/**
- * Floating-controls dodge — safe-zone coverage (NOIOU).
- *
- * The mandate §8/§9: the floating shortcuts (Nouvelle partie / QR de partie /
- * Rejoindre) must never cover important zones — organizer Lightning, the NWC
- * block, collection/settlement controls and explanations, the audit log and the
- * backup & transfer section. The historical behaviour (dodging a primary action
- * crossing the band) must keep working unchanged.
- */
 import { describe, expect, it } from 'vitest';
 import {
   DODGE_CLASS,
@@ -17,9 +8,19 @@ import {
   SAFE_ZONE_SELECTOR,
 } from './floatingControlsDodge';
 
+/**
+ * Minimal DOM stub: rectangles are declared per element, selectors map to lists.
+ * A "zone" also exposes its content elements so the ink-based rule can be
+ * exercised exactly like in the browser.
+ */
 interface StubElement {
   rect: { top: number; bottom: number; left: number; right: number; width: number; height: number };
+  childNodes: unknown[];
+  tagName: string;
+  getAttribute(name: string): string | null;
   getBoundingClientRect(): DOMRect;
+  querySelectorAll(selector: string): StubElement[];
+  checkVisibility?(): boolean;
   contains(other: unknown): boolean;
 }
 
@@ -27,15 +28,29 @@ function element(top: number, bottom: number, left = 0, right = 100): StubElemen
   const rect = { top, bottom, left, right, width: right - left, height: bottom - top };
   return {
     rect,
+    childNodes: [],
+    tagName: 'DIV',
+    getAttribute: () => null,
     getBoundingClientRect: () => rect as unknown as DOMRect,
+    querySelectorAll: () => [],
+    checkVisibility: () => true,
     contains: () => false,
   };
+}
+
+/** A safe zone whose content is one text-bearing element with its own box. */
+function zoneWithContent(zoneTop: number, zoneBottom: number, contentTop: number, contentBottom: number, left = 0, right = 100): StubElement {
+  const zone = element(zoneTop, zoneBottom, left, right);
+  const content = element(contentTop, contentBottom, left, right);
+  // The content element carries a text node directly.
+  content.childNodes = [{ nodeType: 3, textContent: 'Zone content' }];
+  zone.querySelectorAll = () => [content];
+  return zone;
 }
 
 const FLOATING_KEY = '.party-join-launcher, .new-game-fab, .global-preferences:not([open]) > summary';
 const PRIMARY_KEY = 'button.primary.wide, button.wide-mobile, button.primary';
 const SAFE_KEY = '[data-floating-safe-zone]';
-const INTERACTIVE_KEY = 'button, a[href], input, select, textarea, summary, [role="button"]';
 
 function docStub(groups: Record<string, StubElement[]>, classes = new Set<string>()) {
   return {
@@ -60,7 +75,6 @@ describe('floating controls dodge — historical behaviour', () => {
       [FLOATING_KEY]: [element(700, 744)],
       [PRIMARY_KEY]: [element(100, 140)],
       [SAFE_KEY]: [],
-      [INTERACTIVE_KEY]: [],
     });
     expect(protectedContentInBand(doc, winStub())).toBe(false);
   });
@@ -70,7 +84,6 @@ describe('floating controls dodge — historical behaviour', () => {
       [FLOATING_KEY]: [element(720, 764, 12, 220)],
       [PRIMARY_KEY]: [element(730, 771, 12, 378)],
       [SAFE_KEY]: [],
-      [INTERACTIVE_KEY]: [],
     });
     expect(protectedContentInBand(doc, winStub())).toBe(true);
   });
@@ -80,7 +93,6 @@ describe('floating controls dodge — historical behaviour', () => {
       [FLOATING_KEY]: [element(720, 764, 12, 120)],
       [PRIMARY_KEY]: [element(730, 771, 260, 378)],
       [SAFE_KEY]: [],
-      [INTERACTIVE_KEY]: [],
     });
     expect(protectedContentInBand(doc, winStub())).toBe(false);
   });
@@ -90,7 +102,6 @@ describe('floating controls dodge — historical behaviour', () => {
       [FLOATING_KEY]: [element(720, 764)],
       [PRIMARY_KEY]: [element(730, 730)],
       [SAFE_KEY]: [],
-      [INTERACTIVE_KEY]: [],
     });
     expect(protectedContentInBand(doc, winStub())).toBe(false);
   });
@@ -99,8 +110,7 @@ describe('floating controls dodge — historical behaviour', () => {
     const doc = docStub({
       [FLOATING_KEY]: [],
       [PRIMARY_KEY]: [element(730, 771)],
-      [SAFE_KEY]: [element(730, 900)],
-      [INTERACTIVE_KEY]: [element(730, 771)],
+      [SAFE_KEY]: [zoneWithContent(730, 900, 730, 900)],
     });
     expect(protectedContentInBand(doc, winStub())).toBe(false);
   });
@@ -110,7 +120,6 @@ describe('floating controls dodge — historical behaviour', () => {
       [FLOATING_KEY]: [element(720, 764, 12, 220)],
       [PRIMARY_KEY]: [element(730, 771, 12, 378)],
       [SAFE_KEY]: [],
-      [INTERACTIVE_KEY]: [],
     });
     expect(primaryActionInBand(doc, winStub())).toBe(true);
   });
@@ -121,7 +130,6 @@ describe('floating controls dodge — historical behaviour', () => {
       [FLOATING_KEY]: [element(720, 764, 12, 220)],
       [PRIMARY_KEY]: [element(730, 771, 12, 378)],
       [SAFE_KEY]: [],
-      [INTERACTIVE_KEY]: [],
     }, classes);
     const listeners: Record<string, () => void> = {};
     const win = {
@@ -143,66 +151,62 @@ describe('floating controls dodge — historical behaviour', () => {
 });
 
 describe('floating controls dodge — protected safe zones', () => {
-  it('protects a safe zone that a shortcut would cover', () => {
+  it('protects zone content that a shortcut would cover', () => {
     const doc = docStub({
       [FLOATING_KEY]: [element(720, 764, 12, 220)],
       [PRIMARY_KEY]: [],
-      // The NWC block extends under the shortcut even though no CTA is there.
-      [SAFE_KEY]: [element(700, 900, 0, 390)],
-      [INTERACTIVE_KEY]: [],
+      // The zone extends far outside the band, but its CONTENT sits under the
+      // shortcut — that is what must be protected.
+      [SAFE_KEY]: [zoneWithContent(200, 900, 700, 900, 0, 390)],
     });
     expect(protectedContentInBand(doc, winStub())).toBe(true);
   });
 
+  it('does NOT hide the shortcuts for a tall zone whose content is elsewhere', () => {
+    // This is the regression the live acceptance caught: a big section whose
+    // box merely spans the band must not hide the floating controls forever.
+    const doc = docStub({
+      [FLOATING_KEY]: [element(720, 764, 12, 220)],
+      [PRIMARY_KEY]: [],
+      [SAFE_KEY]: [zoneWithContent(100, 1400, 100, 300, 0, 390)],
+    });
+    expect(protectedContentInBand(doc, winStub())).toBe(false);
+  });
+
   it('protects every mandated zone independently', () => {
-    for (const zone of ['nwc', 'ledger', 'backup', 'settlement-controls', 'lightning-organizer', 'locked-rate']) {
+    for (const zone of ['nwc', 'ledger', 'backup', 'settlement-controls', 'settlement-control', 'lightning-organizer', 'locked-rate', 'final-stacks', 'collections', 'dealer-tips', 'rate']) {
       const doc = docStub({
         [FLOATING_KEY]: [element(700, 744, 12, 260)],
         [PRIMARY_KEY]: [],
-        // Every zone under test genuinely overlaps the shortcut box.
-        [SAFE_KEY]: [element(690, 800, 0, 390)],
-        [INTERACTIVE_KEY]: [],
+        [SAFE_KEY]: [zoneWithContent(300, 1300, 690, 800, 0, 390)],
       });
       expect(protectedContentInBand(doc, winStub()), `${zone} not protected`).toBe(true);
     }
   });
 
-  it('does not make a fixed control hide itself (it must stay reachable)', () => {
-    // A plain interactive control under the shortcut whose box is NOT a marked
-    // safe zone: protecting it would hide the shortcut permanently on a long
-    // page. Every mandated zone is marked instead.
+  it('ignores hidden content (collapsed details)', () => {
+    const zone = zoneWithContent(300, 1300, 690, 800, 0, 390);
+    zone.querySelectorAll = () => {
+      const hidden = element(690, 800, 0, 390);
+      hidden.childNodes = [{ nodeType: 3, textContent: 'hidden copy' }];
+      hidden.checkVisibility = () => false;
+      return [hidden];
+    };
     const doc = docStub({
-      [FLOATING_KEY]: [element(720, 764, 12, 220)],
+      [FLOATING_KEY]: [element(700, 744, 12, 260)],
       [PRIMARY_KEY]: [],
-      [SAFE_KEY]: [],
-      [INTERACTIVE_KEY]: [element(730, 766, 60, 200)],
+      [SAFE_KEY]: [zone],
     });
     expect(protectedContentInBand(doc, winStub())).toBe(false);
   });
 
-  it('protects an interactive control that lives INSIDE a marked zone', () => {
-    const doc = docStub({
-      [FLOATING_KEY]: [element(720, 764, 12, 220)],
-      [PRIMARY_KEY]: [],
-      // The settlement controls zone carries its buttons: the zone box overlaps.
-      [SAFE_KEY]: [element(700, 800, 0, 390)],
-      [INTERACTIVE_KEY]: [element(730, 766, 60, 200)],
-    });
-    expect(protectedContentInBand(doc, winStub())).toBe(true);
-  });
-
   it('does not treat the floating shortcuts themselves as obstacles', () => {
-    // Without this guard the launcher would hide itself forever: its own button
-    // lives inside its own obstacle box. Here the floating ROOT list contains
-    // the launcher, so its own button is excluded from the protected set — the
-    // only remaining target (a bare interactive element) sits outside.
     const launcher = element(720, 764, 12, 220);
     const outside = element(100, 140, 0, 100);
     const doc = docStub({
       [FLOATING_KEY]: [launcher],
       [PRIMARY_KEY]: [],
-      [SAFE_KEY]: [],
-      [INTERACTIVE_KEY]: [outside],
+      [SAFE_KEY]: [outside],
     });
     expect(protectedContentInBand(doc, winStub())).toBe(false);
   });

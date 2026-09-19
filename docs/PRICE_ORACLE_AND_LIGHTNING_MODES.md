@@ -89,17 +89,30 @@ reloads, navigation and backup round-trips.
 ## 6. Floating-control occlusion
 
 `src/floatingControlsDodge.ts` protects, in addition to the historical
-“primary action crossing the band” rule:
+“primary action crossing the band” rule, every element marked with
+`data-floating-safe-zone`. The zones covered by the application are:
 
-1. every element marked with `data-floating-safe-zone`
-   (`nwc`, `lightning-organizer`, `settlement-control`, `settlement-controls`,
-   `ledger`, `backup`, and the locked-rate summary);
-2. any in-flow interactive control (button, link, field, summary) that a
-   floating shortcut would overlap.
+| Zone | Surface |
+|---|---|
+| `rate` | rate source block (creation) + SATS note |
+| `locked-rate` | locked-rate read-only summary |
+| `lightning-organizer` | organizer Lightning destination block |
+| `collections` | caves / rebuys and their explanations |
+| `final-stacks` | chip counting |
+| `settlement-control` | impartial settlement control |
+| `settlement-controls` | payouts, dealer line, closure |
+| `dealer-tips` | dealer tips |
+| `nwc` | organizer Lightning / NWC block and mode doctrine |
+| `ledger` | audit log |
+| `backup` | backup & transfer |
 
-The floating shortcuts step aside (opacity + `pointer-events: none`) while an
-overlap exists and return as soon as it is gone. The shortcuts are explicitly
-excluded from being their own obstacle.
+The floating shortcuts (party join / new game) **and the collapsed settings
+pill** step aside (opacity + `pointer-events: none`) while they would overlap a
+protected zone, and return as soon as the overlap is gone.
+
+A fixed control is deliberately never treated as “its own obstacle”: on a long
+page that would hide it permanently and make it unreachable — the opposite of
+the goal. Every mandated zone is enumerated instead.
 
 ## 7. Tests
 
