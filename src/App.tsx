@@ -1302,7 +1302,7 @@ export default function App() {
             <button className="wide-mobile" onClick={() => void execute(addPlayer)}>{t('player.addButton')}</button>
           </section>
 
-          <section className="card" id="collections">
+          <section className="card" id="collections" data-floating-safe-zone="collections">
             <div className="section-title"><h2>{playStarted ? t('collection.title.rebuys') : t('collection.title.initial')}</h2><span>{playStarted ? t('collection.subtitle.playing') : t('collection.subtitle.preparing')}</span></div>
             {players.length === 0 && <p className="muted">{t('collection.empty')}</p>}
             {!playStarted && <div className="lobby-note" id="lobby-start">
@@ -1355,7 +1355,7 @@ export default function App() {
 
       {(game?.status === 'SETTLING' || game?.status === 'CLOSED') && (
         <>
-          <section className="card" id="final-stacks">
+          <section className="card" id="final-stacks" data-floating-safe-zone="final-stacks">
             <div className="section-title"><h2>{t('stack.title')}</h2><span>{stacksLocked ? t('stack.locked') : t('stack.toCount')}</span></div>
             <p className="stack-explainer">{t('stack.explainer')} {expectedIssuedChips !== null ? t('stack.expected', { count: expectedIssuedChips.toLocaleString(locale) }) : ''}</p>
             {players.map((player) => <div className="row" key={player.id}><div><strong>{player.nickname}</strong><small>{t('stack.remaining')}</small></div><input
@@ -1442,7 +1442,7 @@ export default function App() {
       )}
 
       {game?.status === 'CLOSED' && game.dealer.enabled && (
-        <section className="card dealer-tips">
+        <section className="card dealer-tips" data-floating-safe-zone="dealer-tips">
           <div className="section-title"><h2>{t('tip.title')}</h2><span>{t('tip.subtitle')}</span></div>
           <p className="muted">{t('tip.help')}</p>
           {players.map((player) => {

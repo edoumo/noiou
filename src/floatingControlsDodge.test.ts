@@ -167,12 +167,25 @@ describe('floating controls dodge — protected safe zones', () => {
     }
   });
 
-  it('protects an in-flow interactive control covered by a shortcut', () => {
+  it('does not make a fixed control hide itself (it must stay reachable)', () => {
+    // A plain interactive control under the shortcut whose box is NOT a marked
+    // safe zone: protecting it would hide the shortcut permanently on a long
+    // page. Every mandated zone is marked instead.
     const doc = docStub({
       [FLOATING_KEY]: [element(720, 764, 12, 220)],
       [PRIMARY_KEY]: [],
       [SAFE_KEY]: [],
-      // A plain (non-primary) button under the shortcut.
+      [INTERACTIVE_KEY]: [element(730, 766, 60, 200)],
+    });
+    expect(protectedContentInBand(doc, winStub())).toBe(false);
+  });
+
+  it('protects an interactive control that lives INSIDE a marked zone', () => {
+    const doc = docStub({
+      [FLOATING_KEY]: [element(720, 764, 12, 220)],
+      [PRIMARY_KEY]: [],
+      // The settlement controls zone carries its buttons: the zone box overlaps.
+      [SAFE_KEY]: [element(700, 800, 0, 390)],
       [INTERACTIVE_KEY]: [element(730, 766, 60, 200)],
     });
     expect(protectedContentInBand(doc, winStub())).toBe(true);

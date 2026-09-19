@@ -14,9 +14,11 @@
  *     attribute (organizer Lightning / NWC block, settlement explanations and
  *     controls, audit log, backup & transfer, locked-rate summary);
  *  2. primary actions (`.primary`, `.wide`, `.wide-mobile`) travelling through
- *     the floating band — the historical behaviour;
- *  3. any other interactive control (button, link, field, summary) that the
- *     floating shortcut would cover.
+ *     the floating band — the historical behaviour.
+ *
+ * A fixed control is deliberately never treated as "its own obstacle": the
+ * shortcuts and the settings pill must keep their own hitbox reachable, and
+ * every mandated important zone is enumerated through `data-floating-safe-zone`.
  *
  * The check is cheap (a handful of elements, rAF-throttled) and purely visual:
  * no game state, ledger or network involvement.
@@ -30,9 +32,6 @@ const PRIMARY_ACTION_SELECTOR = 'button.primary.wide, button.wide-mobile, button
  * hidden behind the floating shortcuts.
  */
 export const SAFE_ZONE_SELECTOR = '[data-floating-safe-zone]';
-
-/** Any interactive control that must never be covered either. */
-const INTERACTIVE_SELECTOR = 'button, a[href], input, select, textarea, summary, [role="button"]';
 
 /** Elements that step aside. */
 const FLOATING_SELECTOR = '.party-join-launcher, .new-game-fab, .global-preferences:not([open])';
@@ -104,8 +103,8 @@ export function protectedContentInBand(doc: Document, win: Window): boolean {
   const viewportHeight = win.innerHeight || doc.documentElement.clientHeight;
   const bandTop = viewportHeight - BAND_HEIGHT;
 
-  // 2. Historical behaviour: a primary action crossing the floating band and
-  //    intersecting a shortcut box.
+  // 2. Primary actions: an in-flow CTA entering the floating band must never be
+  //    partially covered (historical behaviour, kept unchanged).
   for (const action of Array.from(doc.querySelectorAll<HTMLElement>(PRIMARY_ACTION_SELECTOR))) {
     const box = action.getBoundingClientRect();
     if (!isMeasurable(box)) continue;
@@ -113,19 +112,11 @@ export function protectedContentInBand(doc: Document, win: Window): boolean {
     if (anyOverlap(box, floating)) return true;
   }
 
-  // 3. Any other interactive control an obstacle would cover: an in-flow
-  //    button/field/row must never be clickable-blocked by a fixed shortcut.
-  //    A control counts as covered when its CENTRE is under the obstacle —
-  //    a sliver of overlap at an edge leaves it perfectly usable, so dodging
-  //    for that would flicker the shortcuts for no reason.
-  for (const control of Array.from(doc.querySelectorAll<HTMLElement>(INTERACTIVE_SELECTOR))) {
-    if (isFloating(control)) continue;
-    const box = control.getBoundingClientRect();
-    if (!isMeasurable(box)) continue;
-    const centre = { x: box.left + box.width / 2, y: box.top + box.height / 2 };
-    const covered = floating.some((other) => centre.x >= other.left && centre.x <= other.right && centre.y >= other.top && centre.y <= other.bottom);
-    if (covered) return true;
-  }
+  // Deliberately NOT a rule: "any interactive control under an obstacle".
+  // On a long page a fixed control would then hide itself permanently and
+  // become unreachable — the opposite of the goal. The mandated important
+  // zones are enumerated above, and a control they contain is already covered
+  // by rule 1 through its zone.
 
   return false;
 }
