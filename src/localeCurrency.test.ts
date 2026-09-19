@@ -89,7 +89,7 @@ describe('default currency by locale (§5)', () => {
 
 describe('currency registry (§6/§7)', () => {
   it('registers exactly the mandated currencies', () => {
-    expect(SUPPORTED_CURRENCY_CODES).toEqual(['EUR', 'USD', 'GBP', 'DKK', 'HUF', 'JPY', 'KRW', 'SATS']);
+    expect(SUPPORTED_CURRENCY_CODES).toEqual(['SATS', 'EUR', 'USD', 'GBP', 'DKK', 'HUF', 'JPY', 'KRW']);
     expect(SUPPORTED_CURRENCIES).toHaveLength(8);
   });
 
