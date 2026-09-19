@@ -8,6 +8,7 @@ import type { Catalog } from '../types';
 import type { TranslationKey } from './fr-FR';
 
 export const fi_FI: Record<TranslationKey, string> = {
+  'app.eyebrow': 'Fyysinen pokeri · digitaaliset sisäänostot ja tilitykset',
   'app.nonCustodial': 'Ei säilytä varoja – suunnitteluperiaate',
   'app.steps.aria': 'Pelin vaiheet',
   'app.steps.collect': 'Peri',
