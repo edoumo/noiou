@@ -191,7 +191,12 @@ export function installFloatingControlsDodge({ doc, win }: DodgeDeps): () => voi
   win.addEventListener('resize', schedule);
   const MutationObserverCtor = (win as unknown as { MutationObserver?: typeof MutationObserver }).MutationObserver;
   const observer = typeof MutationObserverCtor === 'function' ? new MutationObserverCtor(schedule) : null;
-  observer?.observe(doc.body, { childList: true, subtree: true });
+  // `open` matters as much as the tree itself: collapsing the settings panel
+  // puts its pill back over the page, and that is an ATTRIBUTE change — a
+  // childList-only observer would leave the dodge in the wrong state until the
+  // next scroll (measured: the cash-only switch stayed covered after closing
+  // the panel).
+  observer?.observe(doc.body, { childList: true, subtree: true, attributes: true, attributeFilter: ['open'] });
 
   return () => {
     if (frame) win.cancelAnimationFrame(frame);
