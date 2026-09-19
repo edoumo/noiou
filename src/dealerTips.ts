@@ -1,5 +1,6 @@
 import type { Currency, DealerTip, Game, PaymentMethod } from './domain';
 import { t } from './i18n';
+import { roundForCurrency } from './currency';
 
 function roundTipAmount(amount: number, currency: Currency): number {
   if (!Number.isFinite(amount) || amount <= 0) throw new Error(t('error.tipPositive'));
@@ -7,7 +8,9 @@ function roundTipAmount(amount: number, currency: Currency): number {
     if (!Number.isInteger(amount)) throw new Error(t('error.tipInteger'));
     return amount;
   }
-  return Math.round((amount + Number.EPSILON) * 100) / 100;
+  // Fiat tips follow their currency's smallest usable unit: whole forint/yen/won
+  // are as indivisible as sats, cents elsewhere.
+  return roundForCurrency(amount, currency);
 }
 
 export function createDealerTip(

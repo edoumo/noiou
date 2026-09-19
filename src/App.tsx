@@ -42,6 +42,15 @@ import { parseExactBolt11Invoice } from './manualExternalLightning';
 import { MAX_LIVE_GAME_INVOICE_SATS, useNwcSession } from './NwcSessionContext';
 import { allocateOrganizerWalletContribution, retainOrganizerPayout as retainOrganizerPayoutAccounting } from './organizerAccounting';
 import { initialBuyInMethods, paymentChoiceLabel, rebuyActionClass } from './paymentFlow';
+import {
+  amountStepFor,
+  defaultCurrencyForLocale,
+  loadCreationCurrencyPreference,
+  resolveCreationCurrency,
+  saveCreationCurrencyPreference,
+  SUPPORTED_CURRENCIES,
+  type CreationCurrencyPreference,
+} from './currency';
 import { DEFAULT_PREFERENCES, loadUserPreferences, PREFERENCES_SAVED_EVENT, saveUserPreferences, type UserPreferences } from './preferences';
 import {
   effectiveLockedRate,
@@ -55,6 +64,8 @@ import {
   fetchQuote,
   PriceOracleError,
   providerLabelKey,
+  providerSupportsCurrency,
+  automaticProvidersForCurrency,
   PRICE_PROVIDER_IDS,
   type RateProviderId,
   type RateQuote,
@@ -97,6 +108,9 @@ function formatAmount(amount: number, currency: Currency, locale: LocaleCode = '
 
 function toSats(amount: number, game: Game): number {
   if (game.currency === 'SATS') return Math.round(amount);
+  // A cash-only game declared at creation never converted anything: say so
+  // plainly instead of reporting a technically missing rate.
+  if (game.cashOnly) throw new Error(translate('error.cashOnlyNoLightning'));
   if (!game.lockedBtcFiatRate || game.lockedBtcFiatRate <= 0) throw new Error(translate('error.rateMissing'));
   return Math.round((amount / game.lockedBtcFiatRate) * 100_000_000);
 }
@@ -219,7 +233,25 @@ export default function App() {
   const ledgerRef = useRef<LedgerEvent[]>(initialSession?.ledger ?? []);
 
   const [themePreference, setThemePreference] = useState<ThemePreference>(() => readThemePreference());
-  const [currency, setCurrency] = useState<Currency>(initialSession?.game?.currency ?? 'EUR');
+  /**
+   * Creation-time currency. It follows the ACTIVE LOCALE's default (exact
+   * region — never a naive "Europe ⇒ EUR" rule) until the organizer picks one
+   * explicitly; an explicit choice survives language changes and can be reset
+   * to the locale default. A created game keeps `game.currency` for good: this
+   * state only shapes the NEXT creation form (see `src/currency.ts`).
+   */
+  const [currencyPreference, setCurrencyPreference] = useState<CreationCurrencyPreference>(() => {
+    const stored = typeof window === 'undefined' ? null : loadCreationCurrencyPreference(window.localStorage);
+    return resolveCreationCurrency(stored, locale);
+  });
+  /** Currency being configured right now (the form writes it; a created game keeps its own). */
+  const currency = currencyPreference.currency;
+  /**
+   * Cash-only declaration for the next game. When checked, NO BTC/fiat rate is
+   * required or locked and no market call is ever attempted, which is what
+   * lets any supported local currency run a fully offline cash game.
+   */
+  const [cashOnly, setCashOnly] = useState(false);
   const [buyIn, setBuyIn] = useState(initialSession?.game?.buyInAmount ?? 10);
   const [chipsPerBuyIn, setChipsPerBuyIn] = useState(() => configuredChipsPerBuyIn(initialSession?.game));
   /**
@@ -323,7 +355,9 @@ export default function App() {
     setSessionRestored(Boolean(restored.game));
 
     if (restored.game) {
-      setCurrency(restored.game.currency);
+      // Import restores the EXACT historical currency: it is never recomputed
+      // from the current locale (mandate §23).
+      setCurrencyPreference({ auto: false, currency: restored.game.currency });
       setBuyIn(restored.game.buyInAmount);
       setChipsPerBuyIn(configuredChipsPerBuyIn(restored.game));
       // Import never refetches a rate: the imported game keeps the exact
@@ -394,6 +428,40 @@ export default function App() {
     window.addEventListener(PREFERENCES_SAVED_EVENT, sync);
     return () => window.removeEventListener(PREFERENCES_SAVED_EVENT, sync);
   }, []);
+
+  /**
+   * Locale ⇒ default currency, for the NEXT creation only.
+   *
+   * While the organizer has never picked a currency by hand (`auto`), changing
+   * the language adjusts the suggested currency (fr-FR ⇒ EUR, then en-US ⇒
+   * USD). An EXPLICIT pick is never replaced silently: switching to Japanese
+   * keeps the chosen GBP. A game already created keeps `game.currency` for
+   * good — this effect touches the creation form only.
+   */
+  useEffect(() => {
+    if (game) return;
+    setCurrencyPreference((current) => {
+      if (!current.auto) return current;
+      const next = defaultCurrencyForLocale(locale) ?? 'EUR';
+      return next === current.currency ? current : { auto: true, currency: next };
+    });
+  }, [locale, game]);
+
+  /**
+   * Keep the automatic source usable for the configured currency (§13/§14).
+   *
+   * Kraken publishes no BTC/DKK, BTC/HUF or BTC/KRW: with those currencies the
+   * selection moves to the first provider that really does publish the pair
+   * (Coinbase today). An explicit MANUAL selection is never touched, and when
+   * NO automatic source exists the selection is left alone so the form can say
+   * so plainly instead of pretending.
+   */
+  useEffect(() => {
+    if (currency === 'SATS') return;
+    if (providerSupportsCurrency(rateProvider, currency)) return;
+    const automatic = automaticProvidersForCurrency(currency)[0];
+    if (automatic) setRateProvider(automatic);
+  }, [currency, rateProvider]);
 
   /**
    * UX27: record the one-time mock-retirement migration in the tamper-evident ledger so the
@@ -477,6 +545,7 @@ export default function App() {
       manualConfirmed: manualRateConfirmed,
       quote: rateQuote,
       nowMs: Date.now(),
+      cashOnly,
     });
     if (plan.kind === 'BLOCKED') {
       if (plan.code === 'QUOTE_STALE') throw new Error(t('rate.stale'));
@@ -488,12 +557,12 @@ export default function App() {
       try {
         const quote = await fetchQuote({
           provider: rateProvider,
-          quote: currency === 'USD' ? 'USD' : 'EUR',
+          quote: currency === 'SATS' ? 'EUR' : currency,
           isOnline: () => online,
         });
         setRateQuote(quote);
         setRateQuoteError(null);
-        return planRateLock({ currency, provider: rateProvider, manualRate, manualNote: manualRateNote, manualConfirmed: manualRateConfirmed, quote, nowMs: Date.now() });
+        return planRateLock({ currency, provider: rateProvider, manualRate, manualNote: manualRateNote, manualConfirmed: manualRateConfirmed, quote, nowMs: Date.now(), cashOnly });
       } catch (caught) {
         // The raw provider error is a technical English string: it must NEVER
         // reach the organizer. Surface it through the rate-source panel (which
@@ -504,6 +573,11 @@ export default function App() {
           : new PriceOracleError('NETWORK', caught instanceof Error ? caught.message : String(caught), rateProvider);
         setRateQuoteError(oracleError);
         setRateQuote(null);
+        if (oracleError.code === 'PAIR_UNSUPPORTED') {
+          // §15: never invent a cross rate. Say that no automatic source exists
+          // for this pair and point at the explicit manual rate.
+          throw new Error(`${t('rate.noAutoSourceTitle')} ${t('rate.noAutoSource', { quote: currency === 'SATS' ? 'EUR' : currency })}`);
+        }
         const providerName = t(providerLabelKey(rateProvider));
         const network = ['OFFLINE', 'NETWORK', 'TIMEOUT'].includes(oracleError.code);
         throw new Error(network
@@ -528,7 +602,6 @@ export default function App() {
     const ratePlanResolved = await resolveRateForCreation();
     if (ratePlanResolved.kind === 'BLOCKED') throw new Error(t('error.positiveRateRequired'));
     const lockedRate = ratePlanResolved.kind === 'MANUAL' || ratePlanResolved.kind === 'AUTO' ? ratePlanResolved.locked : undefined;
-
     const normalizedDealerDestination = dealerEnabled && dealerPayment === 'LIGHTNING'
       ? normalizeReusableLightningDestination(dealerLightningAddress)
       : undefined;
@@ -558,6 +631,10 @@ export default function App() {
       // The lock happens exactly here; nothing below this line ever changes it.
       lockedBtcFiatRate: lockedRate?.rate,
       lockedRate,
+      // Declared cash-only: no rate was needed and no Lightning conversion is
+      // available on this game (the flag is optional, so legacy games and
+      // backups stay readable byte-for-byte).
+      cashOnly: cashOnly || undefined,
       createdAt,
       lobbyVersion: 1,
     };
@@ -569,6 +646,7 @@ export default function App() {
       chipValueLegacy: created.chipValue,
       lockedBtcFiatRate: created.lockedBtcFiatRate ?? null,
       rateProvider: lockedRate?.provider ?? null,
+      cashOnly: Boolean(created.cashOnly),
       dealer: created.dealer,
       lightningReceiveMode: created.lightningReceiveMode,
       organizerDestinationConfigured: Boolean(created.organizerLightningDestination),
@@ -1183,20 +1261,60 @@ export default function App() {
           <div className="section-title"><h2>{t('game.create')}</h2><span>{t('game.create.receiveMode', { mode: receiveModeLabel(lightningReceiveMode, RUNTIME.allowMockPayments) })}</span></div>
           <div className="grid">
             <label>{t('game.currency')}
-              <select value={currency} onChange={(event) => setCurrency(event.target.value as Currency)}>
-                <option value="EUR">EUR</option><option value="USD">USD</option><option value="SATS">SATS</option>
+              <select
+                value={currency}
+                onChange={(event) => {
+                  // An explicit pick is remembered and survives language
+                  // changes; it never re-labels an existing game.
+                  const next: CreationCurrencyPreference = { auto: false, currency: event.target.value as Currency };
+                  setCurrencyPreference(next);
+                  if (typeof window !== 'undefined') saveCreationCurrencyPreference(window.localStorage, next);
+                }}
+              >
+                {SUPPORTED_CURRENCIES.map((descriptor) => (
+                  <option key={descriptor.code} value={descriptor.code}>
+                    {descriptor.code} — {t(descriptor.labelKey)}
+                  </option>
+                ))}
               </select>
             </label>
+            {currencyPreference.auto && defaultCurrencyForLocale(locale) && <p className="muted currency-default-note">
+              {t('game.currencyDefaultNote', { currency: defaultCurrencyForLocale(locale) ?? '' })}
+            </p>}
+            {!currencyPreference.auto && <button
+              type="button"
+              className="currency-reset"
+              onClick={() => {
+                const next: CreationCurrencyPreference = { auto: true, currency: defaultCurrencyForLocale(locale) ?? 'EUR' };
+                setCurrencyPreference(next);
+                if (typeof window !== 'undefined') saveCreationCurrencyPreference(window.localStorage, next);
+              }}
+            >{t('game.currencyReset')}</button>}
             <label>{t('game.buyInLabel')}
-              <input type="number" min="1" step={currency === 'SATS' ? 1 : 0.01} value={buyIn} onChange={(event) => setBuyIn(Number(event.target.value))} />
+              <input type="number" min="1" step={amountStepFor(currency)} value={buyIn} onChange={(event) => setBuyIn(Number(event.target.value))} />
             </label>
             <label>{t('game.chipsPerBuyIn')}
               <input type="number" min="1" step="1" value={chipsPerBuyIn} onChange={(event) => setChipsPerBuyIn(Number(event.target.value))} />
             </label>
+            <label className="check"><input
+              type="checkbox"
+              checked={cashOnly}
+              onChange={(event) => {
+                setCashOnly(event.target.checked);
+                // Declaring the game cash-only drops any automatic quote: no
+                // stale rate may appear pre-filled if the switch is undone.
+                if (event.target.checked) {
+                  setRateQuote(null);
+                  setRateQuoteError(null);
+                  setRateFetching(false);
+                }
+              }}
+            /> {t('game.cashOnlyLabel')}</label>
             <p className="muted chip-rule-note">{t('game.chipRuleNote')}</p>
             <RateSourceControl
               currency={currency}
               online={online}
+              cashOnly={cashOnly}
               state={{ provider: rateProvider, quote: rateQuote, quoteError: rateQuoteError, fetching: rateFetching, manualRate, manualNote: manualRateNote, manualConfirmed: manualRateConfirmed }}
               onChange={(next) => {
                 if (next.provider !== undefined) setRateProvider(next.provider);
@@ -1272,7 +1390,8 @@ export default function App() {
           <div><strong>{game.chipsPerBuyIn ?? configuredChipsPerBuyIn(game)}</strong><small>{t('game.statusCard.chipsPerBuyIn')}</small></div>
         </section>
         {/* Locked rate of the ACTIVE game — read-only, impossible to edit, flagged
-            « non vérifié » when a manual rate was chosen. */}
+            « non vérifié » when a manual rate was chosen. A cash-only game locks
+            no rate at all, so nothing is shown. */}
         {game.currency !== 'SATS' && game.lockedRate && <LockedRateSummary locked={effectiveLockedRate(game)} />}
         <WorkflowGuide game={game} players={players} contributions={contributions} settlement={settlement} payouts={payouts} dealerPaid={dealerPaid} onStartGame={() => void execute(beginPlay)} />
       </>}
@@ -1454,7 +1573,7 @@ export default function App() {
               <div className="tip-player"><strong>{player.nickname}</strong><small>{t('tip.gain', { amount: fmt(payout?.amount ?? 0, game.currency) })}</small></div>
               {existing ? <div className="tip-recorded"><strong>{fmt(existing.amount, existing.currency)} · {existing.method === 'CASH' ? t('method.cash') : existing.method}</strong><small>{t('tip.recorded')}</small></div> : <div className="tip-form">
                 <label>{t('tip.amount')}
-                  <input type="number" min={game.currency === 'SATS' ? 1 : 0.01} step={game.currency === 'SATS' ? 1 : 0.01} value={amount || ''} onChange={(event) => setDealerTipAmounts((current) => ({ ...current, [player.id]: Number(event.target.value) }))} placeholder={game.currency === 'SATS' ? '500' : '2'} />
+                  <input type="number" min={amountStepFor(game.currency)} step={amountStepFor(game.currency)} value={amount || ''} onChange={(event) => setDealerTipAmounts((current) => ({ ...current, [player.id]: Number(event.target.value) }))} placeholder={game.currency === 'SATS' ? '500' : '2'} />
                 </label>
                 <label>{t('tip.method')}
                   <select value={method} onChange={(event) => setDealerTipMethods((current) => ({ ...current, [player.id]: event.target.value as PaymentMethod }))}>

@@ -19,6 +19,7 @@
  * resolved from the global scope at call time) so unit tests never touch the
  * network and the offline path is provable.
  */
+import type { Currency, FiatCurrency } from './domain';
 
 export type RateProviderId = 'KRAKEN' | 'COINBASE' | 'MANUAL';
 
@@ -36,6 +37,56 @@ export function providerRequiresNetwork(provider: RateProviderId): boolean {
   return provider !== 'MANUAL';
 }
 
+/* ------------------------------------------ provider / currency capability */
+
+/**
+ * Automatic pairs each provider actually publishes, verified against the live
+ * public APIs (2026-09-19):
+ *
+ * - KRAKEN `/0/public/AssetPairs` exposes BTC pairs in EUR, USD, GBP and JPY;
+ *   asking it for DKK, HUF or KRW returns `EQuery:Unknown asset pair`;
+ * - COINBASE `/v2/prices/BTC-{code}/spot` answers coherently for EUR, USD,
+ *   GBP, DKK, HUF and KRW. Its BTC/JPY answer is NOT exploitable: on
+ *   2026-09-19 the spot endpoint returned a flat `35600000` JPY per BTC while
+ *   Coinbase's own `/v2/exchange-rates?currency=BTC` said `12755776` and
+ *   Kraken's BTC/JPY midpoint sat at `12737924` — a 2.8x inconsistency, so
+ *   JPY is deliberately marked unsupported at Coinbase rather than serving a
+ *   wrong price. JPY stays covered by Kraken.
+ *
+ * This table is the single answer to `providerSupportsCurrency`, so the UI can
+ * offer or refuse an automatic source per currency without guessing.
+ */
+export const PROVIDER_CURRENCY_SUPPORT: Readonly<Record<Exclude<RateProviderId, 'MANUAL'>, readonly string[]>> = Object.freeze({
+  KRAKEN: Object.freeze(['EUR', 'USD', 'GBP', 'JPY']),
+  COINBASE: Object.freeze(['EUR', 'USD', 'GBP', 'DKK', 'HUF', 'KRW']),
+});
+
+/** True when a provider publishes a BTC/<currency> pair usable for a quote. */
+export function providerSupportsCurrency(provider: RateProviderId, currency: string): boolean {
+  if (provider === 'MANUAL') return true; // a manual rate is possible for any currency
+  return PROVIDER_CURRENCY_SUPPORT[provider].includes(currency);
+}
+
+/** Automatic providers able to quote BTC in this currency, in display order. */
+export function automaticProvidersForCurrency(currency: string): RateProviderId[] {
+  return PRICE_PROVIDER_IDS.filter((provider) => provider !== 'MANUAL' && providerSupportsCurrency(provider, currency));
+}
+
+/**
+ * The automatic provider to prefer for a currency: the organizer preference
+ * when it supports the currency, otherwise the first provider that does.
+ * `undefined` means no automatic source exists for this currency — the UI must
+ * then offer the explicit manual rate (never a silent cross rate).
+ */
+export function preferredAutomaticProvider(
+  preferred: RateProviderId,
+  currency: string,
+): RateProviderId | undefined {
+  if (preferred === 'MANUAL') return undefined;
+  if (providerSupportsCurrency(preferred, currency)) return preferred;
+  return automaticProvidersForCurrency(currency)[0];
+}
+
 /**
  * Locked rate metadata stored on the game (and in every backup).
  *
@@ -44,10 +95,10 @@ export function providerRequiresNetwork(provider: RateProviderId): boolean {
  */
 export interface LockedRate {
   provider: RateProviderId;
-  /** `BTC/EUR` or `BTC/USD`. */
+  /** `BTC/EUR`, `BTC/GBP`, … */
   pair: string;
   base: 'BTC';
-  quote: 'EUR' | 'USD';
+  quote: FiatCurrency;
   /** Present for automatic sources (KRAKEN / COINBASE). */
   bid?: number;
   ask?: number;
@@ -76,6 +127,7 @@ export type PriceOracleErrorCode =
   | 'HTTP'
   | 'INVALID_JSON'
   | 'PAIR_MISSING'
+  | 'PAIR_UNSUPPORTED'
   | 'INVALID_QUOTE'
   | 'STALE_QUOTE'
   | 'TIMEOUT';
@@ -92,7 +144,7 @@ export interface RateQuote {
   provider: RateProviderId;
   pair: string;
   base: 'BTC';
-  quote: 'EUR' | 'USD';
+  quote: FiatCurrency;
   bid: number;
   ask: number;
   rate: number;
@@ -101,7 +153,7 @@ export interface RateQuote {
 
 export interface QuoteRequest {
   provider: RateProviderId;
-  quote: 'EUR' | 'USD';
+  quote: FiatCurrency;
   /** Injected for tests; defaults to the global fetch. */
   fetchImpl?: typeof fetch;
   /** Injection seam for the network-reachability hint. */
@@ -116,7 +168,7 @@ export const DEFAULT_TIMEOUT_MS = 8_000;
 
 /* ------------------------------------------------------------------ pairs */
 
-export function pairForQuote(quote: 'EUR' | 'USD'): string {
+export function pairForQuote(quote: FiatCurrency): string {
   return `BTC/${quote}`;
 }
 
@@ -132,7 +184,7 @@ interface KrakenTickerEntry { a?: unknown[]; b?: unknown[] }
  * and `b` (bid) must be present, finite and positive — otherwise the response
  * is rejected rather than partially trusted.
  */
-export function parseKrakenTicker(payload: unknown, quote: 'EUR' | 'USD'): { bid: number; ask: number } {
+export function parseKrakenTicker(payload: unknown, quote: FiatCurrency): { bid: number; ask: number } {
   const body = payload as { error?: unknown; result?: Record<string, KrakenTickerEntry> } | null;
   if (!body || typeof body !== 'object') throw new PriceOracleError('INVALID_JSON', 'Kraken response is not an object', 'KRAKEN');
   const errors = Array.isArray(body.error) ? body.error.filter((entry): entry is string => typeof entry === 'string' && entry.length > 0) : [];
@@ -178,12 +230,12 @@ export function midpointRate(bid: number, ask: number): number {
 
 /* -------------------------------------------------------------- endpoints */
 
-const ENDPOINTS: Record<Exclude<RateProviderId, 'MANUAL'>, (quote: 'EUR' | 'USD') => string> = {
+const ENDPOINTS: Record<Exclude<RateProviderId, 'MANUAL'>, (quote: FiatCurrency) => string> = {
   KRAKEN: (quote) => `https://api.kraken.com/0/public/Ticker?pair=XBT${quote}`,
   COINBASE: (quote) => `https://api.coinbase.com/v2/prices/BTC-${quote}/spot`,
 };
 
-export function endpointForProvider(provider: RateProviderId, quote: 'EUR' | 'USD'): string {
+export function endpointForProvider(provider: RateProviderId, quote: FiatCurrency): string {
   if (provider === 'MANUAL') throw new PriceOracleError('NETWORK', 'MANUAL has no endpoint', 'MANUAL');
   return ENDPOINTS[provider](quote);
 }
@@ -200,6 +252,13 @@ export function endpointForProvider(provider: RateProviderId, quote: 'EUR' | 'US
 export async function fetchQuote(request: QuoteRequest): Promise<RateQuote> {
   const { provider, quote } = request;
   if (provider === 'MANUAL') throw new PriceOracleError('NETWORK', 'MANUAL is not an automatic provider', 'MANUAL');
+
+  // Capability guard: a provider that publishes no BTC/<currency> pair must fail
+  // closed BEFORE any network call, so the UI can offer the explicit manual
+  // rate — never a silently derived cross rate.
+  if (!providerSupportsCurrency(provider, quote)) {
+    throw new PriceOracleError('PAIR_UNSUPPORTED', `No automatic source available for BTC/${quote}`, provider);
+  }
 
   const online = request.isOnline ?? defaultIsOnline;
   if (!online()) {
@@ -272,7 +331,7 @@ export function isQuoteFresh(quote: RateQuote, now: number = Date.now()): boolea
 /* ----------------------------------------------------------- manual rates */
 
 export interface ManualRateInput {
-  quote: 'EUR' | 'USD';
+  quote: FiatCurrency;
   rate: number;
   note?: string;
   lockedAt?: string;
@@ -314,7 +373,7 @@ export function lockQuote(quote: RateQuote, lockedAt: string = new Date().toISOS
  * Build the locked rate for a game from the resolved creation-time inputs.
  * SATS games carry no BTC/fiat oracle at all.
  */
-export function lockedRateForGame(currency: 'EUR' | 'USD' | 'SATS', input: { manual: ManualRateInput } | { quote: RateQuote }): LockedRate | undefined {
+export function lockedRateForGame(currency: Currency, input: { manual: ManualRateInput } | { quote: RateQuote }): LockedRate | undefined {
   if (currency === 'SATS') return undefined;
   if ('manual' in input) return manualLockedRate(input.manual);
   return lockQuote(input.quote);
@@ -328,7 +387,7 @@ export function lockedRateForGame(currency: 'EUR' | 'USD' | 'SATS', input: { man
  * documented `MANUAL` + `legacy` rate so the historical value is preserved
  * exactly and NEVER refetched from a provider.
  */
-export function legacyLockedRate(rate: number, quote: 'EUR' | 'USD', lockedAt: string): LockedRate {
+export function legacyLockedRate(rate: number, quote: FiatCurrency, lockedAt: string): LockedRate {
   return {
     provider: 'MANUAL',
     pair: pairForQuote(quote),

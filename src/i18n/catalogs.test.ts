@@ -53,6 +53,9 @@ const NEUTRAL_TOKENS = new Set([
   'kraken', 'coinbase',
   // Technical notations (pair code) that stay literal in every language.
   'btc',
+  // Currency names that are internationally invariant: "euro" is spelled the
+  // same in French, Danish, Spanish, Finnish, Croatian, Italian and Portuguese.
+  'euro',
 ]);
 
 /**

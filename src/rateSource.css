@@ -51,6 +51,24 @@
 .rate-manual .check{align-items:flex-start;line-height:1.35}
 .rate-manual .check input{margin-top:3px;flex:0 0 auto}
 
+/* Creation form: locale default currency hint + explicit reset. */
+.currency-default-note{margin:0;grid-column:1/-1;font-size:.82rem;line-height:1.35;color:#6b7280}
+.currency-reset{
+  justify-self:start;
+  grid-column:1/-1;
+  padding:6px 10px;
+  border:1px solid #cbd5e1;
+  border-radius:8px;
+  background:#fff;
+  color:#334155;
+  font-size:.8rem;
+  cursor:pointer;
+}
+.currency-reset:hover{background:#f1f5f9}
+:root[data-theme="dark"] .currency-default-note{color:#94a3b8}
+:root[data-theme="dark"] .currency-reset{background:#0f172a;border-color:#334155;color:#cbd5e1}
+:root[data-theme="dark"] .currency-reset:hover{background:#1e293b}
+
 /* Locked-rate read-only summary (status card / settlement). */
 .locked-rate{
   margin:.35rem 0 0;

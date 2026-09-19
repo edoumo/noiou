@@ -127,4 +127,81 @@ the goal. Every mandated zone is enumerated instead.
 - `src/floatingControlsDodge.test.ts` — historical behaviour + safe zones +
   interactive controls + self-exclusion.
 - `src/nwcTerminology.test.ts` — permission invariants + mandated wording +
-  banned labels across all 14 public locales.
+  banned labels across all 15 public locales.
+- `src/localeCurrency.test.ts` — locale ⇒ default currency, currency registry
+  and minor units, oracle capability per currency, cash-only games for all
+  seven fiat currencies with zero network calls, backups for the new
+  currencies, Intl locale/currency independence.
+
+## 8. Locale, default currency and the cash-only path
+
+A game's **language**, its **currency** and its **rate source** are three
+independent concepts. Locale never dictates what a created game is worth.
+
+### 8.1 Default currency per locale
+
+`src/currency.ts` holds the single table (exact region — never a naive
+“Europe ⇒ EUR” rule):
+
+| Locale | Currency | Locale | Currency | Locale | Currency |
+|---|---|---|---|---|---|
+| fr-FR | EUR | da-DK | DKK | hu-HU | HUF |
+| en-GB | GBP | hr-HR | EUR | ja-JP | JPY |
+| en-US | USD | bg-BG | EUR¹ | ko-KR | KRW |
+| de-DE | EUR | el-GR | EUR | | |
+| es-ES | EUR | fi-FI | EUR | | |
+| it-IT | EUR | | | | |
+| pt-PT | EUR | | | | |
+
+¹ Bulgaria adopted the euro on 2026-01-01: `bg-BG` defaults to EUR, never BGN.
+
+The mapping is a **suggestion before creation only**:
+
+- while the organizer never picked a currency, changing the language adjusts
+  the suggestion (fr-FR ⇒ EUR, then en-US ⇒ USD);
+- an explicit pick is **never replaced silently** — choosing GBP and switching
+  to Japanese keeps GBP;
+- an explicit pick can be reverted with “Back to the language default”;
+- once a game exists, `game.currency` is immutable: changing the language
+  during a game never changes what is being played for.
+
+### 8.2 Currency registry
+
+`CURRENCY_REGISTRY` carries `code`, `labelKey`, `kind`, `minorUnits`, `symbol`
+and `oracleEligible` for EUR, USD, GBP, DKK, HUF, JPY, KRW and SATS. Minor
+units drive input and rounding only — `step=0.01` is never assumed globally:
+EUR/USD/GBP/DKK are 2, while HUF (no fillér in circulation since 1999), JPY,
+KRW and SATS are 0. Display always goes through
+`Intl.NumberFormat(locale, { style: 'currency', currency })`, so it follows the
+display locale's own rules.
+
+### 8.3 Cash-only games need no BTC rate
+
+A fiat game is only asked for a BTC/fiat rate when a Lightning feature actually
+has to convert an amount. Declaring the game **cash-only** at creation skips
+the oracle entirely — no field, no fetch, no lock — so a DKK, HUF, JPY, KRW,
+GBP, EUR or USD cash game runs fully offline. The flag is stored as an optional
+`game.cashOnly`, so legacy sessions and backups stay readable byte-for-byte. A
+Lightning action on such a game fails with an explicit message instead of
+inventing a rate.
+
+### 8.4 Automatic-source capability
+
+`providerSupportsCurrency(provider, currency)` answers from one table, verified
+against the live public APIs on 2026-09-19:
+
+| Pair | Kraken | Coinbase |
+|---|---|---|
+| BTC/EUR, BTC/USD, BTC/GBP | ✅ | ✅ |
+| BTC/JPY | ✅ | ❌² |
+| BTC/DKK, BTC/HUF, BTC/KRW | ❌ | ✅ |
+
+² Coinbase's `BTC-JPY` spot answered a flat `35,600,000` while its own
+`exchange-rates` feed said `12,755,776` and Kraken's midpoint sat at
+`12,737,924` — a 2.8× inconsistency, so JPY is deliberately marked unsupported
+there rather than serving a wrong price.
+
+When no automatic source publishes the pair, the UI says so plainly (“No
+automatic source available for BTC/{quote}”) and offers the explicit manual
+rate. A cross rate (BTC/EUR × EUR/DKK) is **never** derived silently.
+

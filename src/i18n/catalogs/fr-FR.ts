@@ -567,6 +567,24 @@ export const frFR = {
   'rate.unverified': 'Non vérifié par une source de marché',
   'rate.noteLine': 'Note : {note}',
   'rate.satsNoOracle': 'Partie en sats : aucun taux BTC/fiat n’est nécessaire, aucun appel de marché n’est effectué.',
+
+  // ---------------------------------------------- currency (default by locale)
+  'currency.EUR.label': 'euro',
+  'currency.USD.label': 'dollar des États-Unis',
+  'currency.GBP.label': 'livre sterling',
+  'currency.DKK.label': 'couronne danoise',
+  'currency.HUF.label': 'forint hongrois',
+  'currency.JPY.label': 'yen japonais',
+  'currency.KRW.label': 'won sud-coréen',
+  'currency.SATS.label': 'sats Bitcoin',
+  'game.cashOnlyLabel': 'Partie 100 % espèces (aucun taux BTC nécessaire)',
+  'game.currencyReset': 'Revenir à la devise de la langue',
+  'game.currencyDefaultNote': 'Devise par défaut selon la langue : {currency}. Tu peux la changer avant de créer la partie.',
+  'rate.cashOnlyGame': 'Partie en espèces uniquement : aucun taux BTC/fiat n’est nécessaire, aucun appel de marché n’est effectué.',
+  'rate.noAutoSource': 'Aucune source automatique disponible pour BTC/{quote}. Utilise un taux manuel explicite.',
+  'rate.providerUnsupported': '{provider} ne publie pas BTC/{quote}.',
+  'rate.noAutoSourceTitle': 'Aucune source automatique',
+  'error.cashOnlyNoLightning': 'Cette partie a été créée en espèces uniquement : Lightning n’est pas disponible.',
   'rate.summaryTitle': 'Taux BTC/{currency}',
 
   // ------------------------------------------------------------------ shared strings

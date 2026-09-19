@@ -1,10 +1,15 @@
 import { t } from './i18n';
 import type { Contribution, Currency, DealerRule, FinalStack, Game, Player, SettlementResult } from './domain';
+import { isZeroDecimalCurrency, roundForCurrency } from './currency';
 
+/**
+ * Round an amount to the smallest usable unit of its currency.
+ * Zero-decimal currencies (SATS, HUF, JPY, KRW) round to whole units; the
+ * others round to cents. `step=0.01` is deliberately never assumed globally.
+ */
 export function roundAmount(value: number, currency: Currency): number {
   if (!Number.isFinite(value)) throw new Error(t('error.amountMustBeFinite'));
-  if (currency === 'SATS') return Math.round(value);
-  return Math.round((value + Number.EPSILON) * 100) / 100;
+  return roundForCurrency(value, currency);
 }
 
 export function computeDealerCompensation(total: number, rule: DealerRule, currency: Currency = 'EUR'): number {
@@ -91,7 +96,7 @@ export function calculateSettlement(
 
   if (game.chipsPerBuyIn === undefined) {
     const totalStackValue = roundAmount(countedChips * game.chipValue, game.currency);
-    const tolerance = game.currency === 'SATS' ? 0 : 0.01;
+    const tolerance = isZeroDecimalCurrency(game.currency) ? 0 : 0.01;
     if (Math.abs(totalStackValue - totalPaid) > tolerance) throw new Error(t('error.chipInvariant'));
   }
 

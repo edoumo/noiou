@@ -14,7 +14,7 @@
  * - nothing is ever invented: a missing/stale quote blocks creation and asks
  *   for an explicit refresh instead of silently degrading to manual.
  */
-import type { Game } from './domain';
+import type { Currency, FiatCurrency, Game } from './domain';
 import {
   isQuoteFresh,
   legacyLockedRate,
@@ -25,11 +25,11 @@ import {
   type RateProviderId,
   type RateQuote,
 } from './priceOracle';
+import { isFiatCurrencyCode } from './currency';
 
-export type FiatCurrency = 'EUR' | 'USD';
-
+export type { FiatCurrency };
 export function isFiatCurrency(currency: string): currency is FiatCurrency {
-  return currency === 'EUR' || currency === 'USD';
+  return isFiatCurrencyCode(currency);
 }
 
 export interface RatePlanInput {
@@ -45,6 +45,12 @@ export interface RatePlanInput {
   quote: RateQuote | null;
   /** Injectable clock for freshness checks. */
   nowMs: number;
+  /**
+   * True when the game is declared cash-only: no Lightning feature will run,
+   * so no BTC/fiat rate is needed at all. A cash-only fiat game then creates
+   * fully offline with no oracle, no fetch and no lock (mandate §11/§12/§16).
+   */
+  cashOnly?: boolean;
 }
 
 export type RatePlan =
@@ -64,6 +70,9 @@ export type RatePlan =
 export function planRateLock(input: RatePlanInput): RatePlan {
   if (input.currency === 'SATS') return { kind: 'NONE' };
   if (!isFiatCurrency(input.currency)) return { kind: 'NONE' };
+  // A cash-only game never converts to sats: no rate is required, and none is
+  // locked. This is what lets any local fiat currency run fully offline.
+  if (input.cashOnly) return { kind: 'NONE' };
 
   if (input.provider === 'MANUAL') {
     if (input.manualRate === null || Number.isNaN(input.manualRate)) return { kind: 'BLOCKED', code: 'MANUAL_RATE_MISSING' };
@@ -188,6 +197,31 @@ export function sourceNeedsNetwork(provider: RateProviderId): boolean {
 }
 
 /** The pair a creation would use, e.g. `BTC/EUR`. */
-export function pairForCreation(currency: Game['currency']): string | undefined {
+export function pairForCreation(currency: Currency): string | undefined {
   return isFiatCurrency(currency) ? pairForQuote(currency) : undefined;
+}
+
+/**
+ * True when the game needs a BTC/fiat rate at all.
+ *
+ * A fiat game does NOT need one just because it exists: the rate is only
+ * required when a Lightning feature actually has to convert an amount. A
+ * purely cash fiat game (any supported currency) runs fully offline with no
+ * oracle, no fetch and no lock.
+ */
+export function needsBtcFiatRate(currency: Currency, lightningInUse: boolean): boolean {
+  return isFiatCurrency(currency) && lightningInUse;
+}
+
+/**
+ * True when a Lightning feature on this game would need a conversion, i.e. the
+ * game is fiat and some Lightning path is selected or configured.
+ */
+export function gameUsesLightning(game: Game): boolean {
+  return Boolean(
+    game.lightningReceiveMode
+    || game.organizerLightningDestination
+    || game.dealer.lightningAddress
+    || game.dealer.preferredPayment === 'LIGHTNING',
+  );
 }

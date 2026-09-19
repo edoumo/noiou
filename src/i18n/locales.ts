@@ -22,7 +22,8 @@ export const REGISTERED_LOCALES = [
   { code: 'cs-CZ', flag: '🇨🇿', name: 'Čeština' },
   { code: 'da-DK', flag: '🇩🇰', name: 'Dansk' },
   { code: 'de-DE', flag: '🇩🇪', name: 'Deutsch' },
-  { code: 'en-GB', flag: '🇬🇧', name: 'English' },
+  { code: 'en-GB', flag: '🇬🇧', name: 'English (UK)' },
+  { code: 'en-US', flag: '🇺🇸', name: 'English (US)' },
   { code: 'es-ES', flag: '🇪🇸', name: 'Español' },
   { code: 'fi-FI', flag: '🇫🇮', name: 'Suomi' },
   { code: 'fr-FR', flag: '🇫🇷', name: 'Français' },
@@ -61,6 +62,7 @@ export const REGISTERED_LOCALES = [
 export const PUBLIC_LOCALE_CODES = [
   'fr-FR',
   'en-GB',
+  'en-US',
   'de-DE',
   'es-ES',
   'it-IT',

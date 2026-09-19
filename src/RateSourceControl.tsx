@@ -8,7 +8,11 @@
  *   use a manual rate) — NOIOU never invents a price and never falls back to
  *   manual silently;
  * - in Manual mode shows the rate field, an unverified-value warning, the
- *   optional source note and an explicit confirmation checkbox.
+ *   optional source note and an explicit confirmation checkbox;
+ * - a CASH-ONLY game shows no oracle at all (no rate, no market call);
+ * - a currency whose BTC pair no automatic provider publishes is reported
+ *   clearly, with the manual rate as the explicit way forward — a cross rate
+ *   is never derived silently.
  *
  * Manual can be selected BEFORE any Kraken attempt, so a user who knows they
  * are offline never waits for a network timeout.
@@ -16,9 +20,11 @@
 import { useEffect, useState } from 'react';
 import { useI18n } from './i18n/provider';
 import {
+  automaticProvidersForCurrency,
   fetchQuote,
   isQuoteFresh,
   providerLabelKey,
+  providerSupportsCurrency,
   PRICE_PROVIDER_IDS,
   PriceOracleError,
   type LockedRate,
@@ -26,7 +32,7 @@ import {
   type RateQuote,
 } from './priceOracle';
 import { isManualLockedRate } from './ratePlan';
-import type { Currency } from './domain';
+import type { Currency, FiatCurrency } from './domain';
 import './rateSource.css';
 
 export interface RateSourceState {
@@ -43,6 +49,8 @@ export interface RateSourceControlProps {
   currency: Currency;
   state: RateSourceState;
   online: boolean;
+  /** True when the game is declared cash-only: no oracle at all. */
+  cashOnly?: boolean;
   onChange: (next: Partial<RateSourceState>) => void;
   /** Override used by tests to inject a deterministic fetch. */
   fetchImpl?: typeof fetch;
@@ -51,7 +59,7 @@ export interface RateSourceControlProps {
 /** Error codes that mean "the network itself is not reachable". */
 const NETWORK_CODES = new Set(['OFFLINE', 'NETWORK', 'TIMEOUT']);
 
-export function RateSourceControl({ currency, state, online, onChange, fetchImpl }: RateSourceControlProps) {
+export function RateSourceControl({ currency, state, online, cashOnly = false, onChange, fetchImpl }: RateSourceControlProps) {
   const { t, formatNumber } = useI18n();
   const [nowTick, setNowTick] = useState(() => Date.now());
 
@@ -72,6 +80,20 @@ export function RateSourceControl({ currency, state, online, onChange, fetchImpl
     );
   }
 
+  if (cashOnly) {
+    // A cash-only fiat game converts nothing: no oracle is shown or needed,
+    // which is what makes any local currency fully usable offline.
+    return (
+      <div className="rate-source" data-floating-safe-zone="rate">
+        <p className="muted rate-source-note">{t('rate.cashOnlyGame')}</p>
+      </div>
+    );
+  }
+
+  const fiat: FiatCurrency = currency;
+  const availableProviders = automaticProvidersForCurrency(fiat);
+  const providerUnsupported = state.provider !== 'MANUAL' && !providerSupportsCurrency(state.provider, fiat);
+  const noAutomaticSource = availableProviders.length === 0;
   const isManual = state.provider === 'MANUAL';
   const quoteStale = Boolean(state.quote && !isQuoteFresh(state.quote, nowTick));
   const errorNetwork = Boolean(state.quoteError && NETWORK_CODES.has(state.quoteError.code));
@@ -84,11 +106,21 @@ export function RateSourceControl({ currency, state, online, onChange, fetchImpl
   }
 
   async function refresh() {
+    // A provider that publishes no BTC/<currency> pair fails before any network
+    // call; the panel below offers the explicit alternatives.
+    if (state.provider !== 'MANUAL' && !providerSupportsCurrency(state.provider, fiat)) {
+      onChange({
+        quoteError: new PriceOracleError('PAIR_UNSUPPORTED', `No automatic source available for BTC/${fiat}`, state.provider),
+        fetching: false,
+        quote: null,
+      });
+      return;
+    }
     onChange({ fetching: true, quoteError: null });
     try {
       const quote = await fetchQuote({
         provider: state.provider,
-        quote: currency === 'USD' ? 'USD' : 'EUR',
+        quote: fiat,
         fetchImpl,
         isOnline: () => online,
       });
@@ -105,13 +137,35 @@ export function RateSourceControl({ currency, state, online, onChange, fetchImpl
     <div className="rate-source" data-floating-safe-zone="rate">
       <label>{t('rate.source')}
         <select value={state.provider} onChange={(event) => selectProvider(event.target.value as RateProviderId)}>
-          {PRICE_PROVIDER_IDS.map((provider) => (
-            <option key={provider} value={provider}>{t(providerLabelKey(provider))}</option>
-          ))}
+          {PRICE_PROVIDER_IDS.map((provider) => {
+            const supported = provider === 'MANUAL' || providerSupportsCurrency(provider, fiat);
+            return (
+              <option key={provider} value={provider} disabled={!supported}>
+                {t(providerLabelKey(provider))}{supported ? '' : ` — ${t('rate.noAutoSourceTitle')}`}
+              </option>
+            );
+          })}
         </select>
       </label>
 
-      {!isManual && (
+      {providerUnsupported && (
+        // §15: no silent cross rate — say it plainly and offer the explicit
+        // ways forward (another supporting source, or a manual rate).
+        <div className="rate-error" role="alert">
+          <strong>{t('rate.noAutoSourceTitle')}</strong>
+          <small>{noAutomaticSource
+            ? t('rate.noAutoSource', { quote: fiat })
+            : t('rate.providerUnsupported', { provider: t(providerLabelKey(state.provider)), quote: fiat })}</small>
+          <div className="rate-error-actions">
+            {availableProviders.length > 0 && (
+              <button type="button" onClick={() => selectProvider(availableProviders[0])}>{t('rate.changeSource')}</button>
+            )}
+            <button type="button" onClick={() => selectProvider('MANUAL')}>{t('rate.useManual')}</button>
+          </div>
+        </div>
+      )}
+
+      {!isManual && !providerUnsupported && (
         <div className="rate-quote">
           {!online && (
             // §15: the browser reporting no connection shows immediate help —

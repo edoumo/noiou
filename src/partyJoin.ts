@@ -1,5 +1,6 @@
 import type { Currency, PaymentMethod } from './domain';
 import { normalizeReusableLightningDestination } from './lightningDestination';
+import { isSupportedCurrency } from './currency';
 import { t } from './i18n';
 
 export const PARTY_JOIN_VERSION = 1 as const;
@@ -48,7 +49,7 @@ function decodeOrThrow<T>(value: string, message: string): T {
 }
 
 function validCurrency(value: unknown): value is Currency {
-  return value === 'EUR' || value === 'USD' || value === 'SATS';
+  return isSupportedCurrency(value);
 }
 
 function validPayment(value: unknown): value is PaymentMethod | 'ANY' {

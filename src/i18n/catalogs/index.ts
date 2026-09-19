@@ -15,6 +15,7 @@ import { da_DK } from './da-DK';
 import { de_DE } from './de-DE';
 import { el_GR } from './el-GR';
 import { en_GB } from './en-GB';
+import { en_US } from './en-US';
 import { es_ES } from './es-ES';
 import { fi_FI } from './fi-FI';
 import { frFRCatalog } from './fr-FR';
@@ -28,6 +29,7 @@ import { pt_PT } from './pt-PT';
 export const catalogs: Record<string, Catalog> = {
   'fr-FR': frFRCatalog,
   'en-GB': en_GB,
+  'en-US': en_US,
   'de-DE': de_DE,
   'es-ES': es_ES,
   'it-IT': it_IT,
