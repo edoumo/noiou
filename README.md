@@ -77,3 +77,23 @@ See also `docs/V1_SCOPE.md`, `ARCHITECTURE.md`, `SECURITY.md` and `docs/REGULATO
 GNU AGPL v3 or later — see [LICENSE](LICENSE).
 
 The NOIOU name, logo and project identity are **not** licensed under the AGPL. See [TRADEMARK.md](TRADEMARK.md). Forks and modified versions must not present themselves as the official NOIOU application.
+
+
+## Official deployment telemetry
+
+The public official instance at `https://app.noiou.io` emits a deliberately
+minimal set of first-party aggregate counters so maintainers can understand
+whether the product is used and which flows need work.
+
+Allowed events are limited to app open, game created/started/closed, selected
+receive mode (NWC or external/manual), QR/join use and a generic technical
+error counter. Payloads contain only the event name, pathname, active locale
+and a coarse viewport class.
+
+They never contain player names/nicknames, raw game ids, buy-in/rebuy/settlement
+amounts, Lightning amounts, BOLT11 invoices, payment hashes/preimages, wallet
+identifiers, NWC URIs/secrets/credentials or detailed game history. No analytics
+cookie, persistent visitor id or fingerprint is used.
+
+Self-hosted, local, development and hors-production origins do not emit these
+counters. The official dashboard stores aggregate counters only, not raw events.
