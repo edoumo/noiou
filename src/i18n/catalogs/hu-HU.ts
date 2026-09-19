@@ -8,7 +8,6 @@ import type { Catalog } from '../types';
 import type { TranslationKey } from './fr-FR';
 
 export const hu_HU: Record<TranslationKey, string> = {
-  'app.eyebrow': 'Privát alfa · fizikai asztal',
   'app.nonCustodial': 'Letétkezelés nélkül, tervezésből fakadóan',
   'app.steps.aria': 'A játék lépései',
   'app.steps.collect': 'Beszámítás',
