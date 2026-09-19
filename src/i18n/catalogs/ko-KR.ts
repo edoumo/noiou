@@ -8,7 +8,6 @@ import type { Catalog } from '../types';
 import type { TranslationKey } from './fr-FR';
 
 export const ko_KR: Record<TranslationKey, string> = {
-  'app.eyebrow': '비공개 알파 · 실제 테이블',
   'app.nonCustodial': '설계상 비수탁형',
   'app.steps.aria': '게임 단계',
   'app.steps.collect': '수금',
