@@ -10,3 +10,79 @@ button{font:inherit;border:1px solid #d1d5db;background:#fff;color:#111827;borde
 :root[data-theme="dark"] .app-brand-logo-light-theme{display:none}
 :root[data-theme="dark"] .app-brand-logo-dark-theme{display:block}
 @media(max-width:640px){.app-brand-logo{width:min(252px,78vw)}}
+
+
+/* NOIOU brand accent theme — keep the UI neutral, use gold for identity and interaction. */
+:root{
+  --noiou-accent:#f5a524;
+  --noiou-accent-hover:#ffb63d;
+  --noiou-accent-ink:#1a1205;
+  --noiou-accent-text:#9a5f00;
+  --noiou-accent-soft:#fff7e6;
+  --noiou-accent-line:#e6b34f;
+  --noiou-accent-ring:rgba(245,165,36,.34);
+}
+.eyebrow{color:var(--noiou-accent-text)}
+a{color:var(--noiou-accent-text)}
+a:hover{color:#7a4b00}
+input[type="checkbox"],input[type="radio"]{accent-color:var(--noiou-accent)}
+input:focus-visible,select:focus-visible,button:focus-visible,a:focus-visible,summary:focus-visible{
+  outline:3px solid var(--noiou-accent-ring);
+  outline-offset:2px;
+}
+input:focus-visible,select:focus-visible{border-color:var(--noiou-accent-line)}
+.primary,.manual-payout .confirm-payment{
+  background:var(--noiou-accent);
+  color:var(--noiou-accent-ink);
+  border-color:var(--noiou-accent);
+}
+.primary:hover:not(:disabled),.manual-payout .confirm-payment:hover:not(:disabled){
+  background:var(--noiou-accent-hover);
+  border-color:var(--noiou-accent-hover);
+}
+button.selected{
+  background:var(--noiou-accent-soft);
+  color:#6f4500;
+  border-color:var(--noiou-accent-line);
+  box-shadow:inset 0 0 0 1px rgba(154,95,0,.08);
+}
+.steps span.active{
+  background:#111827;
+  color:#fff;
+  box-shadow:inset 0 0 0 2px var(--noiou-accent);
+}
+.steps span.active b{
+  background:var(--noiou-accent);
+  color:var(--noiou-accent-ink);
+}
+.currency-reset:hover{border-color:var(--noiou-accent-line);background:var(--noiou-accent-soft)}
+:root[data-theme="dark"]{
+  --noiou-accent-text:#f5a524;
+  --noiou-accent-soft:#2d210e;
+  --noiou-accent-line:#d99a2a;
+}
+:root[data-theme="dark"] .eyebrow{color:var(--noiou-accent)}
+:root[data-theme="dark"] a{color:#f7bd5f}
+:root[data-theme="dark"] a:hover{color:#ffd58a}
+:root[data-theme="dark"] .primary,
+:root[data-theme="dark"] button.selected,
+:root[data-theme="dark"] .manual-payout .confirm-payment{
+  background:var(--noiou-accent);
+  color:var(--noiou-accent-ink);
+  border-color:var(--noiou-accent);
+}
+:root[data-theme="dark"] .primary:hover:not(:disabled),
+:root[data-theme="dark"] .manual-payout .confirm-payment:hover:not(:disabled){
+  background:var(--noiou-accent-hover);
+  border-color:var(--noiou-accent-hover);
+}
+:root[data-theme="dark"] .steps span.active{
+  background:#111827;
+  color:#f8fafc;
+  box-shadow:inset 0 0 0 2px var(--noiou-accent);
+}
+:root[data-theme="dark"] .steps span.active b{
+  background:var(--noiou-accent);
+  color:var(--noiou-accent-ink);
+}
+:root[data-theme="dark"] .currency-reset:hover{border-color:var(--noiou-accent-line);background:#2d210e}
