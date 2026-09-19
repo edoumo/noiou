@@ -175,6 +175,11 @@ KRW and SATS are 0. Display always goes through
 `Intl.NumberFormat(locale, { style: 'currency', currency })`, so it follows the
 display locale's own rules.
 
+Note on HUF: ICU builds disagree on its decimals (Node 20 renders 2, Node 22
+renders 0) because ISO 4217 still defines the historical fillér. NOIOU therefore
+never derives HUF's decimals from `Intl` — `minorUnits` is the single authority
+for input and rounding.
+
 ### 8.3 Cash-only games need no BTC rate
 
 A fiat game is only asked for a BTC/fiat rate when a Lightning feature actually

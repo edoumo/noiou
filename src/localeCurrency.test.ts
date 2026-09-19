@@ -450,14 +450,17 @@ describe('Intl formatting follows locale AND currency (§18/§19)', () => {
     expect(format(100, 'GBP', 'en-GB')).toBe('£100.00');
     expect(format(100, 'EUR', 'fr-FR').replace(/\u00a0|\u202f/g, ' ')).toContain('100,00');
     expect(format(100.5, 'DKK', 'da-DK').replace(/\u00a0|\u202f/g, ' ')).toContain('100,50');
-    // Zero-decimal currencies show no decimals at all.
-    const huf = new Intl.NumberFormat('hu-HU', { style: 'currency', currency: 'HUF' }).resolvedOptions();
+    // Zero-decimal currencies show no decimals at all (stable across ICU builds).
     const jpy = new Intl.NumberFormat('ja-JP', { style: 'currency', currency: 'JPY' }).resolvedOptions();
     const krw = new Intl.NumberFormat('ko-KR', { style: 'currency', currency: 'KRW' }).resolvedOptions();
     expect(jpy.maximumFractionDigits).toBe(0);
     expect(krw.maximumFractionDigits).toBe(0);
-    expect(huf.maximumFractionDigits).toBe(2); // Intl keeps ISO's 2 for HUF…
-    expect(minorUnitsFor('HUF')).toBe(0);      // …while NOIOU follows real usage for input/rounding
+    // HUF: ICU builds disagree (Node 20 renders 2, Node 22 renders 0) because ISO
+    // 4217 still defines the historical fillér. NOIOU therefore does NOT rely on
+    // Intl for HUF's decimals — `minorUnits` is the authority for input/rounding.
+    const huf = new Intl.NumberFormat('hu-HU', { style: 'currency', currency: 'HUF' }).resolvedOptions();
+    expect([0, 2]).toContain(huf.maximumFractionDigits);
+    expect(minorUnitsFor('HUF')).toBe(0);
   });
 
   it('keeps locale and currency independent (§19)', () => {
