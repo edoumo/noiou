@@ -1297,7 +1297,17 @@ export default function App() {
               }}
             >{t('game.currencyReset')}</button>}
             <label>{t('game.buyInLabel')}
-              <input type="number" min="1" step={amountStepFor(currency)} value={buyIn} onChange={(event) => setBuyIn(Number(event.target.value))} />
+              <div className="amount-input-with-unit">
+                <input
+                  type="number"
+                  min="1"
+                  step={amountStepFor(currency)}
+                  value={buyIn}
+                  aria-label={`${t('game.buyInLabel')} (${currency === 'SATS' ? 'sats' : currency})`}
+                  onChange={(event) => setBuyIn(Number(event.target.value))}
+                />
+                <span className="amount-input-unit" aria-hidden="true">{currency === 'SATS' ? 'sats' : currency}</span>
+              </div>
             </label>
             <label>{t('game.chipsPerBuyIn')}
               <input type="number" min="1" step="1" value={chipsPerBuyIn} onChange={(event) => setChipsPerBuyIn(Number(event.target.value))} />
