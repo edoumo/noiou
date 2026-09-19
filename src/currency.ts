@@ -47,6 +47,7 @@ export interface CurrencyDescriptor {
 
 /** Display order of the currency selector (matches the mandate §20). */
 export const SUPPORTED_CURRENCY_CODES: readonly Currency[] = [
+  'SATS',
   'EUR',
   'USD',
   'GBP',
@@ -54,7 +55,6 @@ export const SUPPORTED_CURRENCY_CODES: readonly Currency[] = [
   'HUF',
   'JPY',
   'KRW',
-  'SATS',
 ] as const;
 
 /**
@@ -81,6 +81,7 @@ export const DEFAULT_CURRENCY_BY_LOCALE: Readonly<Record<string, FiatCurrency>> 
 } as const;
 
 const DESCRIPTOR_ROWS: readonly Omit<CurrencyDescriptor, 'oracleEligible'>[] = [
+  { code: 'SATS', labelKey: 'currency.SATS.label', kind: 'SATS', minorUnits: 0, symbol: 'sats' },
   { code: 'EUR', labelKey: 'currency.EUR.label', kind: 'FIAT', minorUnits: 2, symbol: '€' },
   { code: 'USD', labelKey: 'currency.USD.label', kind: 'FIAT', minorUnits: 2, symbol: '$' },
   { code: 'GBP', labelKey: 'currency.GBP.label', kind: 'FIAT', minorUnits: 2, symbol: '£' },
@@ -88,7 +89,6 @@ const DESCRIPTOR_ROWS: readonly Omit<CurrencyDescriptor, 'oracleEligible'>[] = [
   { code: 'HUF', labelKey: 'currency.HUF.label', kind: 'FIAT', minorUnits: 0, symbol: 'Ft' },
   { code: 'JPY', labelKey: 'currency.JPY.label', kind: 'FIAT', minorUnits: 0, symbol: '¥' },
   { code: 'KRW', labelKey: 'currency.KRW.label', kind: 'FIAT', minorUnits: 0, symbol: '₩' },
-  { code: 'SATS', labelKey: 'currency.SATS.label', kind: 'SATS', minorUnits: 0, symbol: 'sats' },
 ];
 
 /** The central registry, keyed by ISO code. */
