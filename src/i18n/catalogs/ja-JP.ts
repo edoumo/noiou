@@ -8,7 +8,6 @@ import type { Catalog } from '../types';
 import type { TranslationKey } from './fr-FR';
 
 export const ja_JP: Record<TranslationKey, string> = {
-  'app.eyebrow': 'プライベートアルファ · 物理テーブル',
   'app.nonCustodial': '設計上ノンカストディアル',
   'app.steps.aria': 'ゲームのステップ',
   'app.steps.collect': '集金',
