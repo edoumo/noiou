@@ -1,5 +1,7 @@
 # NOIOU v1.0.0
 
+> **License note (added 2026-09-18, post-v1.0.0):** this historical release documentation was written while the public repository still displayed an MIT license. The project license was corrected to **AGPL-3.0-or-later** in the `v1.0.1` release (see `TRADEMARK.md` and `LICENSE`), and the repository metadata now reports AGPL-3.0. The `v1.0.0` tag and its GitHub release remain unchanged for historical traceability.
+
 First stable NOIOU release — production cutover completed.
 
 - Application: <https://app.noiou.io>
